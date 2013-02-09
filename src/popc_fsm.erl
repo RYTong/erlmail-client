@@ -43,6 +43,11 @@
          'POPC_CMD'/2,
          'POPC_CMD'/3]).
 
+-import(socket_util, [connect/3,
+                      read/1,
+                      write/2,
+                      close/1]).
+
 -export([do_parse_test/0]).
 
 %%%----------------------------------------------------------------------
@@ -58,21 +63,20 @@ start_link(Host,Port, Options) -> gen_fsm:start_link(?MODULE, [Host,Port, Option
 %% Authenticate with USER and PASS Command
 
 'POPC_CMD'({auth, User, Password}, _From, #popc_fsm{socket = S,
-                                                    socket_type = Type,
                                                     state = authorization
-                                                    } = State) ->
+                                                   } = State) ->
     ?D({auth, User, Password}),
     UserCmd = "USER " ++ User,
-    ok = request(S, Type, UserCmd),
+    ok = write(S, UserCmd),
     ?D(UserCmd),
-    case response(S, Type) of
+    case response(S) of
         {error, Err} ->
             {reply, {error,Err}, 'POPC_CMD', State};
         {ok, _} ->
             PassCmd = "PASS " ++ Password,
-            ok = request(S, Type, PassCmd),
+            ok = write(S, PassCmd),
             ?D(PassCmd),
-            case response(S, Type) of 
+            case response(S) of 
                 {error, Err1} ->
                     {reply, {error,Err1}, 'POPC_CMD', State};
                 {ok, _} ->
@@ -84,29 +88,27 @@ start_link(Host,Port, Options) -> gen_fsm:start_link(?MODULE, [Host,Port, Option
 %% LIST Command
 
 'POPC_CMD'(list, _From, #popc_fsm{socket = S,
-                                  socket_type = Type,
                                   state = transaction
                                  } = State) ->
     ?D({list, all}),
     ListCmd = "LIST",
-    ok = request(S, Type, ListCmd),
+    ok = write(S, ListCmd),
     ?D(ListCmd),
-    case response(S, Type) of
+    case response(S) of
         {error, Err} ->
             {reply, {error,Err}, 'POPC_CMD', State};
         {ok, Data} ->  
-            Res = parse_multi_line(Data, S, Type),
+            Res = parse_multi_line(Data, S),
             {reply, Res, 'POPC_CMD', State}
     end;
 'POPC_CMD'({list, MessageId}, _From, #popc_fsm{socket = S,
-                                               socket_type = Type,
                                                state = transaction
                                               } = State) ->
     ?D({list, MessageId}),
     ListCmd = lists:concat(["LIST ", MessageId]),
-    ok = request(S, Type, ListCmd),
+    ok = write(S, ListCmd),
     ?D(ListCmd),
-    case response(S, Type) of
+    case response(S) of
         {error, Err} ->
             {reply, {error,Err}, 'POPC_CMD', State};
         {ok, Data} -> 
@@ -116,31 +118,29 @@ start_link(Host,Port, Options) -> gen_fsm:start_link(?MODULE, [Host,Port, Option
 %% RETRIEVE Command
 
 'POPC_CMD'({retr, MessageId}, _From, #popc_fsm{socket = S,
-                                               socket_type = Type,
                                                state = transaction
                                               } = State) ->
     ?D({retrieve, MessageId}),
     RetrCmd = lists:concat(["RETR ", MessageId]),
-    ok = request(S, Type, RetrCmd),
+    ok = write(S, RetrCmd),
     ?D(RetrCmd),
-    case response(S, Type) of
+    case response(S) of
         {error, Err} ->
             {reply, {error,Err}, 'POPC_CMD', State};
         {ok, Data} ->
-             Res = parse_multi_line(Data, S, Type),
+            Res = parse_multi_line(Data, S),
             {reply, Res, 'POPC_CMD', State}
     end;
 
 %% DELE Command
 
-'POPC_CMD'({dele, MessageId}, _From, #popc_fsm{socket = S,
-                                  socket_type = Type
-                                 } = State) ->
+'POPC_CMD'({dele, MessageId}, _From, #popc_fsm{socket = S
+                                              } = State) ->
     ?D({dele, MessageId}),
     DeleCmd = lists:concat(["DELE ", MessageId]),
-    ok = request(S, Type, DeleCmd),
+    ok = write(S, DeleCmd),
     ?D(DeleCmd),
-    case response(S, Type) of
+    case response(S) of
         {error, Err} ->
             {reply, {error,Err}, 'POPC_CMD', State};
         {ok, Data} ->              
@@ -149,25 +149,23 @@ start_link(Host,Port, Options) -> gen_fsm:start_link(?MODULE, [Host,Port, Option
 
 %% DELE Command
 
-'POPC_CMD'(quit, _From, #popc_fsm{socket = S,
-                                  socket_type = Type
+'POPC_CMD'(quit, _From, #popc_fsm{socket = S
                                  } = State) ->
     ?D(quit),
     QuitCmd = "QUIT",
-    request(S, Type, QuitCmd),
+    write(S, QuitCmd),
     ?D(QuitCmd),            
     {stop, normal, ok, State};
 
 %% STAT Command
 
-'POPC_CMD'(stat, _From, #popc_fsm{socket = S,
-                                  socket_type = Type,
+'POPC_CMD'(stat, _From, #popc_fsm{socket = S,                                 
                                   state = transaction
                                  } = State) ->
     StatCmd = "STAT",
-    ok = request(S, Type, StatCmd),
+    ok = write(S, StatCmd),
     ?D(StatCmd),
-    case response(S, Type) of
+    case response(S) of
         {error, Err} ->
             {reply, {error,Err}, 'POPC_CMD', State};
         {ok, Data} ->
@@ -181,25 +179,17 @@ start_link(Host,Port, Options) -> gen_fsm:start_link(?MODULE, [Host,Port, Option
 init([Host, Port, Options]) ->
     ?D("Initializing POPC FSM ..."),
     process_flag(trap_exit, true),
-    State = case lists:member(ssl, Options) of
-                true ->
-                    ssl:start(),
-                    {ok,Socket} = ssl:connect(Host,Port,[binary,{packet,0},{active,once}],infinity),
-                    #popc_fsm{socket = Socket, socket_type = ssl};
-                _ ->
-                    {ok,Socket} = gen_tcp:connect(Host,Port,[binary,{packet,0},{active,once}],infinity),
-                    #popc_fsm{socket = Socket}
-            end,
-    case response(State#popc_fsm.socket, State#popc_fsm.socket_type) of
+    Socket = connect(Host, Port, Options),
+    case response(Socket) of
         {ok, _Data} ->
-            {ok, 'POPC_CMD',State};
+            {ok, 'POPC_CMD', #popc_fsm{socket = Socket}};
         {error, Err} -> 
             {stop, normal, Err}
     end.
 
 
-handle_event(close, _AnyState, #popc_fsm{socket = S, socket_type = Type}) ->
-    request(S, Type, "QUIT"),
+handle_event(close, _AnyState, #popc_fsm{socket = S}) ->
+    write(S, "QUIT"),
     {stop, i_have_quit, []}.
 
 
@@ -208,16 +198,16 @@ handle_sync_event(Event, _From, StateName, StateData) ->
 
 
 
-handle_info({ssl, Socket, Bin}, StateName, #popc_fsm{socket=Socket, socket_type = ssl} = StateData) ->
-    ssl:setopts(Socket, [{active, once}]),
+handle_info({ssl, Socket, Bin}, StateName, #popc_fsm{socket=Socket} = StateData) ->
+    socket_util:setopts(Socket, [{active, once}, binary]),
     ?MODULE:StateName({data, Bin}, StateData);
 
-handle_info({ssl_closed, Socket}, _StateName, #popc_fsm{socket=Socket, socket_type = ssl} = StateData) ->
+handle_info({ssl_closed, Socket}, _StateName, #popc_fsm{socket=Socket} = StateData) ->
     ?D("ssl closed by remote server"),
     {stop, normal, StateData};
 
 handle_info({tcp, Socket, Bin}, StateName, #popc_fsm{socket=Socket} = StateData) ->
-    inet:setopts(Socket, [{active, once}]),
+    socket_util:setopts(Socket, [{active, once}, binary]),
     ?MODULE:StateName({data, Bin}, StateData);
 
 handle_info({tcp_closed, Socket}, _StateName, #popc_fsm{socket=Socket} = StateData) ->
@@ -228,13 +218,10 @@ handle_info(_Info, StateName, StateData) ->
     ?D(_Info),
     {next_state, StateName, StateData}.
 
-terminate(Reason,_StateName,#popc_fsm{socket=Socket, socket_type = ssl}) ->
-    ssl:close(Socket),
-    {terminated, Reason};
 terminate(Reason,_StateName,#popc_fsm{socket=Socket}) -> 
-    gen_tcp:close(Socket),
+    close(Socket),
     {terminated, Reason}.
-    
+
 code_change(_OldVsn, StateName, StateData, _Extra) ->
     {ok, StateName, StateData}.
 
@@ -243,14 +230,9 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %%% Internal functions
 %%%----------------------------------------------------------------------
 
-request(Socket, ssl, Msg) ->
-    ssl:send(Socket, Msg ++ ?CRLF);
-request(Socket, _, Msg) ->
-    gen_tcp:send(Socket, Msg ++ ?CRLF).
 
-
-response(Socket, Type) ->
-    case recv(Socket, Type) of
+response(Socket) ->
+    case read(Socket) of
         {error, _} = Err -> Err;
         Data -> parse_response(Data)
     end.
@@ -262,26 +244,6 @@ parse_response("-ERR" ++ T) ->
 parse_response(E) ->
     {error, E}.
 
-
-recv(S, Type) ->
-    Tag = case Type of 
-              ssl -> ssl;
-              _ -> tcp
-          end,
-    receive
-        {Tag, S, Bin} ->
-            ?D(Bin),
-            case Tag of
-                ssl -> ssl:setopts(S, [{active,once}, binary]);
-                _ -> inet:setopts(S, [{active,once}, binary])
-            end,
-            binary_to_list(Bin);
-        Err ->
-            ?D(Err),
-            {error, Err}
-        after ?TIMEOUT ->
-            {error, timeout}
-    end.
 
 %% Handle byte-stuff here.
 %% @link http://tools.ietf.org/html/rfc1939#section-3
@@ -305,37 +267,37 @@ recv(S, Type) ->
 %%    part of the multi-line response.
 
 %% Return {ok, String} | {error, timeout}
-parse_multi_line(Data, S, Type) ->
-    do_parse(0, Data, [], S, Type).
+parse_multi_line(Data, S) ->
+    do_parse(0, Data, [], S).
 
 %% STATE - 0 begin of the line
 %%       - 1 rest of the line
 
 
 
-do_parse(0, [$., 13, 10|_], Res, _S, _Type) ->
+do_parse(0, [$., 13, 10|_], Res, _S) ->
     {ok, lists:reverse(Res)};
 
-do_parse(0, [$.|T], Res, S, Type) ->
-    do_parse(1, T, Res, S, Type);
+do_parse(0, [$.|T], Res, S) ->
+    do_parse(1, T, Res, S);
 
 
-do_parse(_, [13, 10|T], Res, S, Type) ->
-    do_parse(0, T, [10, 13|Res], S, Type);
+do_parse(_, [13, 10|T], Res, S) ->
+    do_parse(0, T, [10, 13|Res], S);
 
-do_parse(_, [H|T], Res, S, Type) ->
-    do_parse(1, T, [H|Res], S, Type);
+do_parse(_, [H|T], Res, S) ->
+    do_parse(1, T, [H|Res], S);
 
-do_parse(_State, {error, Err}, _Res, _S, _Type) ->
+do_parse(_State, {error, Err}, _Res, _S) ->
     {error, Err};
 %% %% for test
 %% do_parse(_State, [], _Res, undefined, _Type) ->
 %%    {error, "socket is undefined"};
 
-do_parse(State, [], Res, S, Type) ->
-    do_parse(State, recv(S, Type), Res, S, Type).
+do_parse(State, [], Res, S) ->
+    do_parse(State, read(S), Res, S).
 
 do_parse_test() ->
     Str = "></HTML>\r\n..\r\n------=_001_NextPart344028817884_=------\r\n\r\n.\r\n",
-    parse_multi_line(Str, undefined, undefined).
+    parse_multi_line(Str, undefined).
 

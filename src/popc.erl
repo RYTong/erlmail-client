@@ -37,7 +37,8 @@
          quit/1,
          retrieve/2]).
 
--export([connect/0]).
+-export([connect/0,
+         test/2]).
 %% ------------------------------------------
 %% Set up a connection to a POP3 server
 %% ------------------------------------------
@@ -74,4 +75,16 @@ quit(Pid) ->
 
 
 connect() -> connect("mail.rytong.com", 995, [ssl]).
+
+test(User, Pass) ->
+    {ok, P} = connect(),
+    login(P, User, Pass),
+    stat(P),
+    list(P),
+    list(P,1),
+    retrieve(P, 1),
+    %%delete(P,1),
+    quit(P).
+   
+    
 
