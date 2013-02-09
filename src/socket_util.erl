@@ -78,7 +78,7 @@ close(#socket{fd = S}) ->
 setopts(#socket{fd = S, type = ssl}, Options) ->
     ssl:setopts(S, Options);
 setopts(#socket{fd = S}, Options) ->
-    inets:setopts(S, Options).
+    inet:setopts(S, Options).
 
 %%
 %% Local Functions

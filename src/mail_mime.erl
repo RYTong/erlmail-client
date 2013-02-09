@@ -7,12 +7,16 @@
 %%%-------------------------------------------------------------------
 -module(mail_mime).
 
--include_lib("mail_mime.hrl").
+-include("mail_mime.hrl").
 
 %% API
--export([encode/1, send/5,
-         msg/0, msg/3, msg/4,
-         from/1, to/1,
+-export([encode/1, 
+         send/5,
+         msg/0,
+         msg/3, 
+         msg/4,
+         from/1, 
+         to/1,
          add_text_part/2]).
 
 -export([test_msg/0,

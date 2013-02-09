@@ -48,7 +48,9 @@
 -export([]).
 %% states
 -export([smtp_cmd/3]).
+
 %% Testing Functions
+
 -export([]).
 %% gen_server callbacks
 -export([init/1, 
@@ -57,6 +59,10 @@
          handle_info/3, 
          terminate/3, 
          code_change/4]).
+
+-import(socket_util, [connect/3,
+                      write/2,
+                      close/1]).
 
 
 %%%----------------------------------------------------------------------
@@ -73,8 +79,8 @@ start_link(Host,Port, Options) -> gen_fsm:start_link(?MODULE, [Host,Port, Option
 %%%----------------------------------------------------------------------
 %%% State functions
 %%%----------------------------------------------------------------------
-	
-	
+
+
 %%%----------------------------------------------------------------------
 %%% HELO Command
 %%%----------------------------------------------------------------------
@@ -82,14 +88,15 @@ smtp_cmd({helo, Name}, From, State)->
     Msg = "HELO" ++ [32] ++ Name,
     write(State#smtpc.socket, Msg),
     case read(State#smtpc.socket) of
-	{250, Resp} -> 
-		gen_fsm:reply(From,{250,Resp}),
-	    {reply,ok,smtp_cmd,State#smtpc{state=mail}};
-	{Code, Resp} -> 
-		gen_fsm:reply(From,{Code,Resp}),
-	    {reply,ok,smtp_cmd, State};
-	Error -> 
-	    {stop, Error, [], []}
+        {250, Resp} -> 
+            gen_fsm:reply(From,{250,Resp}),
+            {next_state,smtp_cmd,State#smtpc{state=mail}};
+        {Code, Resp} -> 
+            gen_fsm:reply(From,{Code,Resp}),
+            {next_state,smtp_cmd, State};
+        Error -> 
+            gen_fsm:reply(From,{error, Error}),
+            {stop, Error, [], []}
     end;
 %%%----------------------------------------------------------------------
 %%% EHLO Command
@@ -99,33 +106,34 @@ smtp_cmd({ehlo, Name}, From, State) ->
     ?D(Msg),
     write(State#smtpc.socket, Msg),
     case read(State#smtpc.socket) of
-	{250, Resp} ->
-        ?D({250, Resp}),
-        NewState = lists:foldl(fun("250-AUTH" ++ Rest, Acc) ->
-                                       AuthTypes = string:tokens(Rest, " "),
-                                       Acc#smtpc{auth = AuthTypes, state = auth};
-                                  ("250"++ Feature, Acc) ->
-                                       Features = Acc#smtpc.features,
-                                       Acc#smtpc{features = [string:sub_string(Feature, 2)|Features]};
-                                  (_Other, Acc) ->
-                                       Acc
-                               end, State#smtpc{state = mail}, string:tokens(Resp, "\r\n")),
-        ?D(NewState),
-%% 	    Strs = [string:sub_string(X,5) || X <- string:tokens(Resp, "\r\n")],
-	    {reply, ok, smtp_cmd, NewState};
-	{Code, Resp} -> 
-        ?D({Code, Resp}),
-		gen_fsm:reply(From,{Code,Resp}),
-	    {reply,ok,smtp_cmd, State};
-	Error -> 
-         ?D(Error),
-	    {stop, Error, [], []}
+        {250, Resp} ->
+            ?D({250, Resp}),
+            NewState = lists:foldl(fun("250-AUTH" ++ Rest, Acc) ->
+                                           AuthTypes = string:tokens(Rest, " "),
+                                           Acc#smtpc{auth = AuthTypes, state = auth};
+                                      ("250"++ Feature, Acc) ->
+                                           Features = Acc#smtpc.features,
+                                           Acc#smtpc{features = [string:sub_string(Feature, 2)|Features]};
+                                      (_Other, Acc) ->
+                                           Acc
+                                   end, State#smtpc{state = mail}, string:tokens(Resp, "\r\n")),
+            ?D(NewState),
+            gen_fsm:reply(From,{250,Resp}),
+            {next_state, smtp_cmd, NewState};
+        {Code, Resp} -> 
+            ?D({Code, Resp}),
+            gen_fsm:reply(From,{Code,Resp}),
+            {next_state,smtp_cmd, State};
+        Error -> 
+            ?D(Error),
+            gen_fsm:reply(From,{error,Error}),
+            {stop, Error, [], []}
     end;
 
 %%%----------------------------------------------------------------------
 %%% AUTH Command
 %%%----------------------------------------------------------------------
-smtp_cmd({auth, User, Password}, _From, State=#smtpc{auth = AuthTypes, state = auth}) ->
+smtp_cmd({auth, User, Password}, From, State=#smtpc{auth = AuthTypes, state = auth}) ->
     AuthType = type(AuthTypes),
     Res = case AuthType of
               'plain' -> auth_plain(User, Password, State#smtpc.socket);
@@ -137,11 +145,12 @@ smtp_cmd({auth, User, Password}, _From, State=#smtpc{auth = AuthTypes, state = a
             {reply,ok,smtp_cmd, State#smtpc{state = mail}};
         Error -> 
             ?D(Error),
+            gen_fsm:reply(From,{error, Error}),
             {stop, Error, [], []}
     end;
-        
-            
-    
+
+
+
 %%%----------------------------------------------------------------------
 %%% ETRN Command
 %%%----------------------------------------------------------------------
@@ -149,14 +158,15 @@ smtp_cmd({etrn, Queue}, From, State) ->
     Msg = "ETRN" ++ [32] ++ Queue,
     write(State#smtpc.socket, Msg),
     case read(State#smtpc.socket) of
-	{250, Resp} -> 
-		gen_fsm:reply(From,{250,Resp}),
-	    {reply, ok, smtp_cmd, State};
-	{Code, Resp} -> 
-		gen_fsm:reply(From,{Code,Resp}),
-	    {reply,ok,smtp_cmd, State};
-	Error -> 
-	    {stop, Error, [], []}
+        {250, Resp} -> 
+            gen_fsm:reply(From,{250,Resp}),
+            {next_state, smtp_cmd, State};
+        {Code, Resp} -> 
+            gen_fsm:reply(From,{Code,Resp}),
+            {next_state,smtp_cmd, State};
+        Error -> 
+            gen_fsm:reply(From,{error,Error}),
+            {stop, Error, [], []}
     end;
 %%%----------------------------------------------------------------------
 %%% ETRN Command
@@ -165,14 +175,15 @@ smtp_cmd({expn, Alias}, From, State) ->
     Msg = "EXPN" ++ [32] ++ Alias,
     write(State#smtpc.socket, Msg),
     case read(State#smtpc.socket) of
-	{250, Resp} -> 
-		gen_fsm:reply(From,{250,Resp}),
-	    {reply, ok, smtp_cmd, State};
-	{Code, Resp} -> 
-		gen_fsm:reply(From,{Code,Resp}),
-	    {reply,ok,smtp_cmd, State};
-	Error -> 
-	    {stop, Error, [], []}
+        {250, Resp} -> 
+            gen_fsm:reply(From,{250,Resp}),
+            {next_state, smtp_cmd, State};
+        {Code, Resp} -> 
+            gen_fsm:reply(From,{Code,Resp}),
+            {next_state,smtp_cmd, State};
+        Error -> 
+            gen_fsm:reply(From,{error, Error}),
+            {stop, Error, [], []}
     end;
 %%%----------------------------------------------------------------------
 %%% HELP Command
@@ -181,14 +192,15 @@ smtp_cmd(help, From, State) ->
     Msg = "HELP",
     write(State#smtpc.socket, Msg),
     case read(State#smtpc.socket) of
-	{214, Resp} -> 
-		gen_fsm:reply(From,{214,Resp}),
-	    {reply, ok, smtp_cmd, State};
-	{Code, Resp} -> 
-		gen_fsm:reply(From,{Code,Resp}),
-	    {reply,ok,smtp_cmd, State};
-	Error -> 
-	    {stop, Error, [], []}
+        {214, Resp} -> 
+            gen_fsm:reply(From,{214,Resp}),
+            {next_state, smtp_cmd, State};
+        {Code, Resp} -> 
+            gen_fsm:reply(From,{Code,Resp}),
+            {next_state,smtp_cmd, State};
+        Error -> 
+            gen_fsm:reply(From,{error, Error}),
+            {stop, Error, [], []}
     end;
 %%%----------------------------------------------------------------------
 %%% MAIL Command
@@ -197,14 +209,15 @@ smtp_cmd({mail, Address}, From, State) ->
     Msg = "MAIL FROM:<" ++ Address ++ ">",
     write(State#smtpc.socket, Msg),
     case read(State#smtpc.socket) of
-	{250, Resp} -> 
-		gen_fsm:reply(From,{250,Resp}),
-	    {reply, ok, smtp_cmd, State#smtpc{state=rcpt}};
-	{Code, Resp} -> 
-		gen_fsm:reply(From,{Code,Resp}),
-	    {reply,ok,smtp_cmd, State};
-	Error -> 
-	    {stop, Error, [], []}
+        {250, Resp} -> 
+            gen_fsm:reply(From,{250,Resp}),
+            {next_state, smtp_cmd, State#smtpc{state=rcpt}};
+        {Code, Resp} -> 
+            gen_fsm:reply(From,{Code,Resp}),
+            {next_state,smtp_cmd, State};
+        Error -> 
+            gen_fsm:reply(From,{error, Error}),
+            {stop, Error, [], []}
     end;
 %%%----------------------------------------------------------------------
 %%% NOOP Command
@@ -213,14 +226,15 @@ smtp_cmd(noop, From, State) ->
     Msg = "NOOP",
     write(State#smtpc.socket, Msg),
     case read(State#smtpc.socket) of
-	{250, Resp} -> 
-		gen_fsm:reply(From,{250,Resp}),
-	    {reply, ok, smtp_cmd, State};
-	{Code, Resp} -> 
-		gen_fsm:reply(From,{Code,Resp}),
-	    {reply,ok,smtp_cmd, State};
-	Error -> 
-	    {stop, Error, [], []}
+        {250, Resp} -> 
+            gen_fsm:reply(From,{250,Resp}),
+            {next_state, smtp_cmd, State};
+        {Code, Resp} -> 
+            gen_fsm:reply(From,{Code,Resp}),
+            {next_state,smtp_cmd, State};
+        Error -> 
+            gen_fsm:reply(From,{error, Error}),
+            {stop, Error, [], []}
     end;
 %%%----------------------------------------------------------------------
 %%% QUIT Command
@@ -229,18 +243,18 @@ smtp_cmd(quit, From, State) ->
     Msg = "QUIT",
     write(State#smtpc.socket, Msg),
     case read(State#smtpc.socket) of
-	{221, Resp} -> 
-        ?D(Resp),
-		gen_tcp:close(State#smtpc.socket),
-		gen_fsm:reply(From,{221,Resp}),
-	    {reply, ok, smtp_cmd, State};
-	{Code, Resp} -> 
-        ?D({Code, Resp}),
-		gen_fsm:reply(From,{Code,Resp}),
-	    {reply,ok,smtp_cmd, State};
-	Error -> 
-        ?D(Error),
-	    {stop, Error, [], []}
+        {221, Resp} -> 
+            ?D(Resp),
+            gen_fsm:reply(From,{221,Resp}),
+            {next_state, smtp_cmd, State};
+        {Code, Resp} -> 
+            ?D({Code, Resp}),
+            gen_fsm:reply(From,{Code,Resp}),
+            {next_state,smtp_cmd, State};
+        Error -> 
+            ?D(Error),
+            gen_fsm:reply(From,{error, Error}),
+            {stop, Error, [], []}
     end;
 %%%----------------------------------------------------------------------
 %%% RSET Command
@@ -249,14 +263,15 @@ smtp_cmd(rset, From, State) ->
     Msg = "RSET",
     write(State#smtpc.socket, Msg),
     case read(State#smtpc.socket) of
-	{250, Resp} -> 
-		gen_fsm:reply(From,{250,Resp}),
-	    {reply, ok, smtp_cmd, State#smtpc{state=mail}};
-	{Code, Resp} -> 
-		gen_fsm:reply(From,{Code,Resp}),
-	    {reply,ok,smtp_cmd, State};
-	Error -> 
-	    {stop, Error, [], []}
+        {250, Resp} -> 
+            gen_fsm:reply(From,{250,Resp}),
+            {next_state, smtp_cmd, State#smtpc{state=mail}};
+        {Code, Resp} -> 
+            gen_fsm:reply(From,{Code,Resp}),
+            {next_state,smtp_cmd, State};
+        Error -> 
+            gen_fsm:reply(From,{error, Error}),
+            {stop, Error, [], []}
     end;
 %%%----------------------------------------------------------------------
 %%% RCPT Command
@@ -265,17 +280,18 @@ smtp_cmd({rcpt, Address}, From, State) ->
     Msg = "RCPT TO:<" ++ Address ++ ">",
     write(State#smtpc.socket, Msg),
     case read(State#smtpc.socket) of
-	{250, Resp} -> 
-		gen_fsm:reply(From,{250,Resp}),
-	    {reply, ok, smtp_cmd, State#smtpc{state=rcpt}};
-	{511, Resp} -> 
-		gen_fsm:reply(From,{511,Resp}),
-	    {reply, ok, smtp_cmd, State#smtpc{state=rcpt}};
-	{Code, Resp} -> 
-		gen_fsm:reply(From,{Code,Resp}),
-	    {reply,ok,smtp_cmd, State};
-	Error -> 
-	    {stop, Error, [], []}
+        {250, Resp} -> 
+            gen_fsm:reply(From,{250,Resp}),
+            {next_state, smtp_cmd, State#smtpc{state=rcpt}};
+        {511, Resp} -> 
+            gen_fsm:reply(From,{511,Resp}),
+            {next_state, smtp_cmd, State#smtpc{state=rcpt}};
+        {Code, Resp} -> 
+            gen_fsm:reply(From,{Code,Resp}),
+            {next_state,smtp_cmd, State};
+        Error -> 
+            gen_fsm:reply(From,{error, Error}),
+            {stop, Error, [], []}
     end;
 %%%----------------------------------------------------------------------
 %%% VRFY Command
@@ -284,17 +300,18 @@ smtp_cmd({vrfy, Address}, From, State) ->
     Msg = "VRFY " ++ Address,
     write(State#smtpc.socket, Msg),
     case read(State#smtpc.socket) of
-	{250, Resp} -> 
-		gen_fsm:reply(From,{250,Resp}),
-	    {reply, ok, smtp_cmd, State#smtpc{state=rcpt}};
-	{511, Resp} -> 
-		gen_fsm:reply(From,{511,Resp}),
-	    {reply, ok, smtp_cmd, State#smtpc{state=rcpt}};
-	{Code, Resp} -> 
-		gen_fsm:reply(From,{Code,Resp}),
-	    {reply,ok,smtp_cmd, State};
-	Error -> 
-	    {stop, Error, [], []}
+        {250, Resp} -> 
+            gen_fsm:reply(From,{250,Resp}),
+            {next_state, smtp_cmd, State#smtpc{state=rcpt}};
+        {511, Resp} -> 
+            gen_fsm:reply(From,{511,Resp}),
+            {next_state, smtp_cmd, State#smtpc{state=rcpt}};
+        {Code, Resp} -> 
+            gen_fsm:reply(From,{Code,Resp}),
+            {next_state,smtp_cmd, State};
+        Error -> 
+            gen_fsm:reply(From,{error, Error}),
+            {stop, Error, [], []}
     end;
 %%%----------------------------------------------------------------------
 %%% DATA Command
@@ -304,65 +321,66 @@ smtp_cmd({data,Message}, From, State) ->
     Msg = "DATA",
     write(State#smtpc.socket, Msg),
     case read(State#smtpc.socket) of
-	{354, _Resp} -> 
-	    write(State#smtpc.socket, Message ++ ?SMTP_DATA_END),
-    	case read(State#smtpc.socket) of
-			{250, DataResp} -> 
-				gen_fsm:reply(From,{250,DataResp}),
-	    		{reply, ok, smtp_cmd, State#smtpc{state=mail}};
-			{Code, DataResp} -> 
-				gen_fsm:reply(From,{Code,DataResp}),
-			    {reply,ok,smtp_cmd, State};
-			Error -> 
-				{stop, Error, [], []}
-			end;
-	{Code, Resp} -> 
-		gen_fsm:reply(From,{Code,Resp}),
-	    {reply,ok,smtp_cmd, State};
-	Error -> 
-	    {stop, Error, [], []}
+        {354, _Resp} -> 
+            write(State#smtpc.socket, Message ++ ?SMTP_DATA_END),
+            case read(State#smtpc.socket) of
+                {250, DataResp} -> 
+                    gen_fsm:reply(From,{250,DataResp}),
+                    {next_state, smtp_cmd, State#smtpc{state=mail}};
+                {Code, DataResp} -> 
+                    gen_fsm:reply(From,{Code,DataResp}),
+                    {next_state,smtp_cmd, State};
+                Error -> 
+                    gen_fsm:reply(From,{error, Error}),
+                    {stop, Error, [], []}
+            end;
+        {Code, Resp} -> 
+            gen_fsm:reply(From,{Code,Resp}),
+            {next_state,smtp_cmd, State};
+        Error -> 
+            gen_fsm:reply(From,{error, Error}),
+            {stop, Error, [], []}
     end;
 %%%----------------------------------------------------------------------
 %%% INFO Command 
 %%%----------------------------------------------------------------------
 smtp_cmd({info,Info}, From, State) -> 
-	case Info of
-		all -> gen_fsm:reply(From,State);
-		features -> gen_fsm:reply(From,State#smtpc.features);
-		state -> gen_fsm:reply(From,State#smtpc.state);
-		type -> gen_fsm:reply(From,State#smtpc.type);
-		scoket -> gen_fsm:reply(From,State#smtpc.socket);
-		_Other -> gen_fsm:reply(From,State)
-	end,
-	{reply,ok,smtp_cmd,State}.
+    case Info of
+        all -> gen_fsm:reply(From,State);
+        features -> gen_fsm:reply(From,State#smtpc.features);
+        state -> gen_fsm:reply(From,State#smtpc.state);
+        type -> gen_fsm:reply(From,State#smtpc.type);
+        scoket -> gen_fsm:reply(From,State#smtpc.socket);
+        _Other -> gen_fsm:reply(From,State)
+    end,
+    {next_state,smtp_cmd,State}.
 
 %%%----------------------------------------------------------------------
 %%% Callback functions from gen_fsm
 %%%----------------------------------------------------------------------
 
 init([Server,Port, Options]) ->
-	case gen_tcp:connect(Server,Port,[binary,{packet,0},{active,once}]) of 
-		{ok,Socket} ->
-			case read(Socket) of
-				{220, Resp} -> {ok, smtp_cmd, #smtpc{socket=Socket,type=smtp_type(Resp)}};
-				{error,Reason} -> {error,Reason}
-			end;
-		{error,Reason} -> {error,Reason}
-	end.
+    Socket = connect(Server,Port,Options),
+    case read(Socket) of
+        {220, Resp} -> {ok, smtp_cmd, #smtpc{socket=Socket,type=smtp_type(Resp)}};
+        {error,Reason} -> {error,Reason}
+    end.
 
-handle_event(close, _AnyState, State) ->
-    ok = gen_tcp:send(State#smtpc.socket, "quit\r\n"),
+
+handle_event(close, _AnyState, #popc_fsm{socket = S}) ->
+    write(S, "QUIT"),
     {stop, i_have_quit, []}.
 
 handle_sync_event(rset, _From, _AnyState, State) ->
-	{reply, ok, smtp_cmd, State}.
+    {reply, ok, smtp_cmd, State}.
 
 handle_info(_Info, StateName, StateData) ->
     {next_state, StateName, StateData}.
 
-terminate(Reason,_StateName,_StateData) -> 
+terminate(Reason,_StateName, #smtpc{socket = S}) -> 
+    close(S),
     {terminated, Reason}.
-	
+
 code_change(_OldVsn, StateName, StateData, _Extra) ->
     {ok, StateName, StateData}.
 
@@ -372,68 +390,27 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 
 
 %%--------------------------------------------------------------------
-%% Function: read(Socket)
-%%         : read(Socket,Encrypt)
-%%         : read(Socket,Encrypt,Acc)
-%%           Socket : TCP Socket
-%%           Encrypt: Atom - Encryption Type - Unused
-%%           Acc    : List - Accumulator
-%% Descrip.: Reads from Socket until CRLF is received
-%% Returns : List
-%%--------------------------------------------------------------------
-read(Socket) -> read(Socket, <<>>).
-read(Socket,Packet) ->
-    %% FIXME Process may hang here when there is no response from 
-    %% remote SMTP server.
-	receive
-		{tcp,Socket,Bin} ->
-			NewPacket = <<Packet/binary,Bin/binary>>,
-			String = binary_to_list(NewPacket),
-			set_socket_opts(Socket),
-			case string:right(String,2) of
-				?CRLF -> 
-					Line = string:left(String,length(String) - 2),
-					parse(Line);
-				_ -> read(Socket,NewPacket)
-			end;
-		{tcp_closed, Socket} -> {error,socket_closed};
-        Err -> ?D(Err), {error,socket_closed}
-	end.
-
-%%--------------------------------------------------------------------
 %% Function: parse(Line)
 %%           Line: List - one line of SMTP data
 %% Descrip.: Separates a line of SMTP data into a command and the data
 %% Returns : {Command,Response}
 %%--------------------------------------------------------------------
+
+read(Socket) ->
+    case socket_util:read(Socket) of
+        {error, _} =Err -> Err;
+        Data -> parse(Data)
+    end.
+
 parse(Line) ->
-	{CodeString,RespText} = lists:split(3,Line),
-	{list_to_integer(CodeString),string:strip(RespText)}.
-	
+    {CodeString,RespText} = lists:split(3,Line),
+    {list_to_integer(CodeString),string:strip(RespText)}.
+
 smtp_type(RespText) ->
-	case string:str(http_util:to_lower(RespText),"esmtp") of
-		0 -> smtp;
-		_ -> esmtp
-	end.
-
-%%--------------------------------------------------------------------
-%% Function: write(Socket,Msg)
-%%         : write(Socket,Msg,Encrypt)
-%%           Socket : TCP Socket
-%%           Msg    : List - Message
-%%           Encrypt: Atom - Encryption Type - Unused
-%% Descrip.: Write message to socket, adds CRLF is needed
-%% Returns : List
-%%--------------------------------------------------------------------
-write(Socket,Msg) -> 
-	Last = string:right(Msg,2),
-	case Last of
-		?CRLF -> gen_tcp:send(Socket,Msg);
-		_      -> gen_tcp:send(Socket,Msg ++ ?CRLF)
-	end.
-
-set_socket_opts(Socket) -> inet:setopts(Socket, [{active, once}, binary]).
-
+    case string:str(http_util:to_lower(RespText),"esmtp") of
+        0 -> smtp;
+        _ -> esmtp
+    end.
 
 
 
@@ -461,5 +438,6 @@ auth_plain(User, Password, Socket) ->
             {error, Err}
     end.
 
-auth_login(User, Password, Socket) ->
+auth_login(_User, _Password, _Socket) ->
     to_do.
+

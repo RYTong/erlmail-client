@@ -35,13 +35,13 @@
 %%%---------------------------------------------------------------------------------------
 -module(smtpc).
 -author('sjackson@simpleenigma.com').
--include("../include/smtp.hrl").
+-include("client.hrl").
 
 -export([connect/1,help/1,noop/1,quit/1,rcpt/2,rset/1,vrfy/2]).
 -export([connect/3,data/2,ehlo/2, auth/3, etrn/2,expn/2,helo/2,mail/2]).
--export([sendmail/3,sendmail/4,sendmail/5,sendmail/6, sendmail/10]).
 
--export([sendmail_test/0]).
+-export([sendmail/10]).
+-export([sendmail_test/6]).
 
 %%-------------------------------------------------------------------------
 %% @spec (IpAddress::term()) -> {ok,Pid::pid()} | {error,Reason::atom()}
@@ -63,7 +63,7 @@ connect(IPAddress,Port, Options) -> smtpc_fsm:start(IPAddress,Port, Options).
 %% Descrip.: Sends data of email message
 %% Returns : {Code,Response} - {250,String}
 %%--------------------------------------------------------------------
-data(Pid,Message) ->  gen_fsm:sync_send_event(Pid, {data,Message}).
+data(Pid,Message) ->  gen_fsm:sync_send_event(Pid, {data,Message}, infinity).
 
 %%--------------------------------------------------------------------
 %% Function: ehlo(Pid,HostName)
@@ -72,7 +72,7 @@ data(Pid,Message) ->  gen_fsm:sync_send_event(Pid, {data,Message}).
 %% Descrip.: EHLO handshake
 %% Returns : {Code,Response} - {250,String}
 %%--------------------------------------------------------------------
-ehlo(Pid,HostName) -> gen_fsm:sync_send_event(Pid, {ehlo,HostName}).
+ehlo(Pid,HostName) -> gen_fsm:sync_send_event(Pid, {ehlo,HostName}, infinity).
 
 %%--------------------------------------------------------------------
 %% Function: etrn(Pid,Message)
@@ -81,7 +81,7 @@ ehlo(Pid,HostName) -> gen_fsm:sync_send_event(Pid, {ehlo,HostName}).
 %% Descrip.: Asks server to process message in Queue
 %% Returns : {Code,Response}
 %%--------------------------------------------------------------------
-etrn(Pid,Queue) -> gen_fsm:sync_send_event(Pid, {etrn,Queue}).
+etrn(Pid,Queue) -> gen_fsm:sync_send_event(Pid, {etrn,Queue}, infinity).
 
 %%--------------------------------------------------------------------
 %% Function: expn(Pid,Alias)
@@ -91,7 +91,7 @@ etrn(Pid,Queue) -> gen_fsm:sync_send_event(Pid, {etrn,Queue}).
 %%            implimented due to anti-spam practices
 %% Returns : {Code,Response}
 %%--------------------------------------------------------------------
-expn(Pid,Alias) -> gen_fsm:sync_send_event(Pid, {expn,Alias}).
+expn(Pid,Alias) -> gen_fsm:sync_send_event(Pid, {expn,Alias}, infinity).
 
 %%--------------------------------------------------------------------
 %% Function: help(Pid,HostName)
@@ -100,7 +100,7 @@ expn(Pid,Alias) -> gen_fsm:sync_send_event(Pid, {expn,Alias}).
 %% Descrip.: HELO handshake
 %% Returns : {Code,Response} - {250,String}
 %%--------------------------------------------------------------------
-helo(Pid,HostName) -> gen_fsm:sync_send_event(Pid, {helo,HostName}).
+helo(Pid,HostName) -> gen_fsm:sync_send_event(Pid, {helo,HostName}, infinity).
 
 %%--------------------------------------------------------------------
 %% Function: help(Pid,Message)
@@ -108,7 +108,7 @@ helo(Pid,HostName) -> gen_fsm:sync_send_event(Pid, {helo,HostName}).
 %% Descrip.: Asks for help about how to use the server
 %% Returns : {Code,Response} - {221,String}
 %%--------------------------------------------------------------------
-help(Pid) -> gen_fsm:sync_send_event(Pid, help).
+help(Pid) -> gen_fsm:sync_send_event(Pid, help, infinity).
 
 %%--------------------------------------------------------------------
 %% Function: mail(Pid,From)
@@ -117,7 +117,7 @@ help(Pid) -> gen_fsm:sync_send_event(Pid, help).
 %% Descrip.: Tell the server what the from address of the serer is
 %% Returns : {Code,Response}
 %%--------------------------------------------------------------------
-mail(Pid,From) -> gen_fsm:sync_send_event(Pid, {mail,From}).
+mail(Pid,From) -> gen_fsm:sync_send_event(Pid, {mail,From}, infinity).
 
 %%--------------------------------------------------------------------
 %% Function: noop(Pid)
@@ -125,7 +125,7 @@ mail(Pid,From) -> gen_fsm:sync_send_event(Pid, {mail,From}).
 %% Descrip.: No Operation
 %% Returns : {Code,Response}
 %%--------------------------------------------------------------------
-noop(Pid) -> gen_fsm:sync_send_event(Pid, noop).
+noop(Pid) -> gen_fsm:sync_send_event(Pid, noop, infinity).
 
 %%--------------------------------------------------------------------
 %% Function: quit(Pid)
@@ -134,7 +134,7 @@ noop(Pid) -> gen_fsm:sync_send_event(Pid, noop).
 %%            the Socket
 %% Returns : {Code,Response} - {250,String}
 %%--------------------------------------------------------------------
-quit(Pid) -> gen_fsm:sync_send_event(Pid, quit).
+quit(Pid) -> gen_fsm:sync_send_event(Pid, quit, infinity).
 
 %%--------------------------------------------------------------------
 %% Function: rcpt(Pid,Message)
@@ -143,7 +143,7 @@ quit(Pid) -> gen_fsm:sync_send_event(Pid, quit).
 %% Descrip.: Tell server address of recipiant, usually max 100.
 %% Returns : {Code,Response} - {250,"ok"}
 %%--------------------------------------------------------------------
-rcpt(Pid,To) -> gen_fsm:sync_send_event(Pid, {rcpt,To}).
+rcpt(Pid,To) -> gen_fsm:sync_send_event(Pid, {rcpt,To}, infinity).
 
 %%--------------------------------------------------------------------
 %% Function: rset(Pid)
@@ -161,9 +161,9 @@ rset(Pid) -> gen_fsm:sync_send_event(Pid, rset).
 %%            disabled to discourage email address harvesting
 %% Returns : {Code,Response}
 %%--------------------------------------------------------------------
-vrfy(Pid,Address) -> gen_fsm:sync_send_event(Pid, {vrfy,Address}).
+vrfy(Pid,Address) -> gen_fsm:sync_send_event(Pid, {vrfy,Address}, infinity).
 
-auth(Pid, User, Password) -> gen_fsm:sync_send_event(Pid, {auth, User, Password}).
+auth(Pid, User, Password) -> gen_fsm:sync_send_event(Pid, {auth, User, Password}, infinity).
 
 stop(Pid) -> exit(Pid, kill).
 
@@ -178,20 +178,7 @@ stop(Pid) -> exit(Pid, kill).
 %% Descrip.: Sends data of email message
 %% Returns : ok
 %%--------------------------------------------------------------------
-sendmail(From, To, Message) ->
-    {ok, Ehlo} = application:get_env(smtpc, ehlo),
-    {ok, {Host, Port}} = application:get_env(smtpc, smarthost),
-    sendmail(Host, Port, Ehlo, From, To, Message).
-sendmail(IPAddress,From,To,Message) -> sendmail(IPAddress,25,"ErlMail",From,To,Message).
-sendmail(IPAddress,Host,From,To,Message) -> sendmail(IPAddress,25,Host,From,To,Message).
-sendmail(IPAddress,Port,Host,From,To,Message) ->
-	{ok,Pid} = connect(IPAddress,Port,[]),
-	ehlo(Pid,Host),
-	mail(Pid,From),
-	rcpt(Pid,To),
-	data(Pid,Message),
-	quit(Pid),
-	ok.
+
 
 sendmail(IPAddress, Port, Host, From, To, User, Password, Subject, Message, Options) ->
     ?D("111"),
@@ -223,7 +210,5 @@ sendmail(IPAddress, Port, Host, From, To, User, Password, Subject, Message, Opti
     end.
         
 
-sendmail_test() ->
-    sendmail("smtp.mail.yahoo.com", 25, 
-             "cx5557@yahoo.com.cn", "cx5557@yahoo.com.cn", "cao.xu@rytong.net",
-             "cx5557", "xxxxxxx", "helo", "test123", []).
+sendmail_test(From, To, User, Pass, Subjet, Content) ->
+    sendmail("smtp.mail.yahoo.com", 25, "127.0.0.1", From, To, User, Pass, Subjet, Content, []).
