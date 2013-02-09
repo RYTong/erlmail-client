@@ -1,14 +1,4 @@
 %%%---------------------------------------------------------------------------------------
-%%% @author     Stuart Jackson <simpleenigma@gmail.com> [http://erlsoft.org]
-%%% @copyright  2006 - 2007 Simple Enigma, Inc. All Rights Reserved.
-%%% @doc        POP client API
-%%% @reference  See <a href="http://erlsoft.org/modules/erlmail" target="_top">Erlang Software Framework</a> for more information
-%%% @reference  See <a href="http://erlmail.googlecode.com" target="_top">ErlMail Google Code Repository</a> for more information
-%%% @version    0.0.6
-%%% @since      0.0.6
-%%% @end
-%%%
-%%%
 %%% The MIT License
 %%%
 %%% Copyright (c) 2007 Stuart Jackson, Simple Enigma, Inc. All Righs Reserved

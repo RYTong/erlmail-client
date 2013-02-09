@@ -36,7 +36,7 @@
 -module(smtpc_fsm).
 -author('sjackson@simpleenigma.com').
 -behavior(gen_fsm). % Finite State Machine
--include("../include/smtp.hrl").
+-include("client.hrl").
 
 %% External Exports
 -export([start/1,
