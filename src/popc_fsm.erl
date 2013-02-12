@@ -48,7 +48,8 @@
                       write/2,
                       close/1]).
 
--export([do_parse_test/0]).
+-export([do_parse_test/0,
+         get_mime_test/0]).
 
 %%%----------------------------------------------------------------------
 %%% API
@@ -128,7 +129,10 @@ start_link(Host,Port, Options) -> gen_fsm:start_link(?MODULE, [Host,Port, Option
         {error, Err} ->
             {reply, {error,Err}, 'POPC_CMD', State};
         {ok, Data} ->
-            Res = parse_multi_line(Data, S),
+            Res = case parse_multi_line(Data, S) of
+                      {ok, Raw} -> get_mime(Raw);
+                      Err -> ?D(Err), Err
+                  end,
             {reply, Res, 'POPC_CMD', State}
     end;
 
@@ -297,7 +301,20 @@ do_parse(_State, {error, Err}, _Res, _S) ->
 do_parse(State, [], Res, S) ->
     do_parse(State, read(S), Res, S).
 
+
+get_mime(Raw) when is_list(Raw) ->
+    case string:str(Raw, [13,10]) of
+        Index when Index >0 ->
+            {ok, string:substr(Raw, Index + 2)};
+        _ ->
+            {error, invalide_mime_input}
+    end.
+    
 do_parse_test() ->
     Str = "></HTML>\r\n..\r\n------=_001_NextPart344028817884_=------\r\n\r\n.\r\n",
     parse_multi_line(Str, undefined).
+
+get_mime_test() ->
+    Raw = "follow messages \r\nReturnPath:xxxx\r\nFrom : test@localhost \r\nTo: ...",
+    get_mime(Raw).
 

@@ -26,7 +26,7 @@
 -module(popc).
 -author('cao.xu@rytong.com').
 
-
+-include("mimemail.hrl").
 -export([connect/2,
          connect/3,
          login/3,
@@ -62,7 +62,17 @@ list(Pid, MessageId) ->
     gen_fsm:sync_send_event(Pid, {list, MessageId}, infinity).
 
 retrieve(Pid, MessageId) ->
-    gen_fsm:sync_send_event(Pid, {retr, MessageId}, infinity).
+    case gen_fsm:sync_send_event(Pid, {retr, MessageId}, infinity) of
+        {ok, C} when C /= [] ->
+            {Type, SubType, Headers, Properties, Body} = mimemail:decode(list_to_binary(C)),
+            #mimemail{type = Type, 
+                      subtype = SubType,
+                      headers = Headers,
+                      properties = Properties, 
+                      body = decode_body(Body)};
+        _ ->
+            throw("invalid message format")
+    end.
 
 
 delete(Pid, MessageId) ->
@@ -70,9 +80,25 @@ delete(Pid, MessageId) ->
 
 quit(Pid) ->
     gen_fsm:sync_send_event(Pid, quit, infinity).
+
+
+%% internal functions.
+
+decode_body({Type, SubType, Headers, Properties, Body}) ->
+    #mimemail{type = Type, 
+              subtype = SubType,
+              headers = Headers,
+              properties = Properties, 
+              body = decode_body(Body)};
+decode_body(Body) when is_binary(Body) ->
+    Body;
+decode_body(Body) when is_list(Body) ->
+    [decode_body(X)|| X <-Body].
+                           
  
 
 
+%% tests.
 
 connect() -> connect("mail.rytong.com", 995, [ssl]).
 
