@@ -41,6 +41,21 @@
                state = helo % State of command, [helo,mail,rcpt,data]
               }).
 
+-record(attachment, {name,
+                     type,
+                     subtype,
+                     content,
+                     render  %% <<"inline">>|<<"attachment">>
+                    }).
+
+-record(mail, {from,
+               to,
+               date,
+               id,
+               subject,
+               content,
+               attachements %% [attachment()]
+  }).
 
 
 

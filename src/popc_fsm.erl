@@ -39,7 +39,8 @@
          terminate/3, 
          code_change/4]).
 
--export([start_link/3,
+-export([start/3,
+         start_link/3,
          'POPC_CMD'/2,
          'POPC_CMD'/3]).
 
@@ -56,6 +57,8 @@
 %%%----------------------------------------------------------------------
 
 start_link(Host,Port, Options) -> gen_fsm:start_link(?MODULE, [Host,Port, Options], []).
+
+start(Host,Port, Options) -> gen_fsm:start(?MODULE, [Host,Port, Options], []).
 
 'POPC_CMD'(Data, State) ->
     io:format("~p Ignoring data: ~p\n", [self(), Data]),

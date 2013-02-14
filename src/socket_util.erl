@@ -27,12 +27,12 @@ connect(Host,Port, Options) ->
     {UseSsl, Timeout} = get_options(Options),
     if UseSsl ->
            ssl:start(),
-           {ok, Socket} = ssl:connect(Host,Port,[binary,{packet,0},{active,once}],Timeout),
+           {ok, Socket} = ssl:connect(Host,Port,[binary, {keepalive, true}, {packet,0},{active,once}],Timeout),
            #socket{fd = Socket,
                    type = ssl,
                    timeout = Timeout};
        true ->
-           {ok, Socket} = gen_tcp:connect(Host,Port,[binary,{packet,0},{active,once}],Timeout),
+           {ok, Socket} = gen_tcp:connect(Host,Port,[binary, {keepalive, true}, {packet,0},{active,once}],Timeout),
            #socket{fd = Socket,
                    type = tcp,
                    timeout = Timeout}

@@ -47,8 +47,10 @@
 connect(IpAddress, Port) ->
     connect(IpAddress, Port, []).
 connect(IpAddress, Port, Options) ->
-    popc_fsm:start_link(IpAddress, Port, Options).
+    popc_fsm:start(IpAddress, Port, Options).
 
+
+%% return : ok | {error, Err}
 login(Pid, User, Password) ->
     gen_fsm:sync_send_event(Pid, {auth, User, Password}, infinity).
 
@@ -62,17 +64,7 @@ list(Pid, MessageId) ->
     gen_fsm:sync_send_event(Pid, {list, MessageId}, infinity).
 
 retrieve(Pid, MessageId) ->
-    case gen_fsm:sync_send_event(Pid, {retr, MessageId}, infinity) of
-        {ok, C} when C /= [] ->
-            {Type, SubType, Headers, Properties, Body} = mimemail:decode(list_to_binary(C)),
-            #mimemail{type = Type, 
-                      subtype = SubType,
-                      headers = Headers,
-                      properties = Properties, 
-                      body = decode_body(Body)};
-        _ ->
-            throw("invalid message format")
-    end.
+    gen_fsm:sync_send_event(Pid, {retr, MessageId}, infinity).
 
 
 delete(Pid, MessageId) ->
@@ -84,16 +76,7 @@ quit(Pid) ->
 
 %% internal functions.
 
-decode_body({Type, SubType, Headers, Properties, Body}) ->
-    #mimemail{type = Type, 
-              subtype = SubType,
-              headers = Headers,
-              properties = Properties, 
-              body = decode_body(Body)};
-decode_body(Body) when is_binary(Body) ->
-    Body;
-decode_body(Body) when is_list(Body) ->
-    [decode_body(X)|| X <-Body].
+
                            
  
 
