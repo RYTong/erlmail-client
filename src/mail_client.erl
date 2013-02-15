@@ -21,7 +21,7 @@
          retrieve/2,
          open_send_session/5,
          close_send_session/1,
-         send/6
+         send/7
         ]).
 
 -export([raw_message_to_mail/1,
@@ -74,8 +74,9 @@ retrieve(Fsm, MessageId) ->
 %% Send APIs
 
 
-open_send_session(Server, Port, User, Passwd, Options) ->
-    {ok, Fsm} = smptc:connect(Server, Port, Options),
+open_send_session(Server, Port, User, Passwd, Options) ->    
+    {ok, Fsm} = smtpc:connect(Server, Port, Options),
+    smtpc:ehlo(Fsm, "localhost"),
     ok = smtpc:auth(Fsm, User, Passwd),
     {ok, Fsm}.
 
@@ -87,9 +88,13 @@ close_send_session(Fsm) ->
             ok
     end.
 
-send(Fsm, From, To, Subject, Body, Attatchments) ->
-    Mail = encode_mail(From, To, Subject, Body, Attatchments),
-    smtpc:data(Fsm, Mail).
+send(Fsm, From, To, Cc, Subject, Body, Attatchments) ->
+    ?D(From),
+    smtpc:mail(Fsm, From),
+    [smtpc:rcpt(Fsm, Address)|| Address<-To],
+    [smtpc:rcpt(Fsm, Address)|| Address<-Cc],
+    Mail = encode_mail(From, To, Cc, Subject, Body, Attatchments),
+    smtpc:data(Fsm, binary_to_list(Mail)).
 
 
 %%
@@ -114,7 +119,20 @@ get_total_number(Raw) ->
     [Num|_] = string:tokens(string:substr(Raw, 1, Index -1), " "),
     list_to_integer(Num).
 
-encode_mail(From, To, Subject, Body, Attatchments) ->
+encode_mail(From, To, Cc, Subject, Body, []) ->
+    ToList = [{<<"To">>, list_to_binary(Address)}|| Address <-To],
+    CcList = [{<<"Cc">>, list_to_binary(Address)}|| Address <-Cc],
+    Headers = [{<<"From">>, list_to_binary(From)},
+               {<<"Subject">>, list_to_binary(Subject)},
+               {<<"MIME-Version">>, <<"1.0">>}] ++ ToList ++ CcList,
+    Email = {<<"text">>, <<"plain">>, Headers,
+             [{<<"content-type-params">>,
+               [{<<"charset">>,<<"UTF-8">>}],
+               {<<"disposition">>,<<"inline">>}}],
+             list_to_binary(Body)},
+    mimemail:encode(Email);
+
+encode_mail(From, To, Cc, Subject, Body, Attatchments) ->
     to_do.
 
 decode_body({Type, SubType, Headers, Properties, Body}) ->
@@ -157,7 +175,7 @@ mime_to_mail(#mimemail{type = <<"multipart">>,
               attachements = Attatchments};
 mime_to_mail(#mimemail{headers = Headers,
                        body = Body} = Mime) ->
-    %%     ?D(Mime),
+    ?D(Mime),
     Mail = get_headers(Headers),
     {Content, Attatchments} = 
         parse_body([Body], {<<"">>, []}),
