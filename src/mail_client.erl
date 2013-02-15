@@ -189,7 +189,7 @@ get_headers(Headers) ->
           to = proplists:get_all_values(<<"To">>, Headers),
           cc = proplists:get_all_values(<<"Cc">>, Headers),
           date = proplists:get_value(<<"Date">>, Headers),
-          id = proplists:get_value(<<"Message-Id">>, Headers),
+          id = proplists:get_value(<<"Message-ID">>, Headers),
           subject = proplists:get_value(<<"Subject">>, Headers)
          }.
 
