@@ -83,7 +83,8 @@ open_send_session(Server, Port, User, Passwd, Options) ->
 close_send_session(Fsm) ->
     case erlang:is_process_alive(Fsm) of
         true ->
-            smtpc:quit(Fsm);
+            smtpc:quit(Fsm),
+            ok;
         _ ->
             ok
     end.
@@ -94,7 +95,8 @@ send(Fsm, From, To, Cc, Subject, Body, Attatchments) ->
     [smtpc:rcpt(Fsm, Address)|| Address<-To],
     [smtpc:rcpt(Fsm, Address)|| Address<-Cc],
     Mail = encode_mail(From, To, Cc, Subject, Body, Attatchments),
-    smtpc:data(Fsm, binary_to_list(Mail)).
+    smtpc:data(Fsm, binary_to_list(Mail)),
+    ok.
 
 
 %%
@@ -172,7 +174,7 @@ mime_to_mail(#mimemail{type = <<"multipart">>,
     {Content, Attatchments} = 
         parse_body(Body, {<<"">>, []}),
     Mail#mail{content = Content,
-              attachements = Attatchments};
+              attachments = Attatchments};
 mime_to_mail(#mimemail{headers = Headers,
                        body = Body} = Mime) ->
     ?D(Mime),
@@ -180,11 +182,12 @@ mime_to_mail(#mimemail{headers = Headers,
     {Content, Attatchments} = 
         parse_body([Body], {<<"">>, []}),
     Mail#mail{content = Content,
-              attachements = Attatchments}.
+              attachments = Attatchments}.
 
 get_headers(Headers) ->
     #mail{from = proplists:get_value(<<"From">>, Headers),
-          to = proplists:get_value(<<"To">>, Headers),
+          to = proplists:get_all_values(<<"To">>, Headers),
+          cc = proplists:get_all_values(<<"Cc">>, Headers),
           date = proplists:get_value(<<"Date">>, Headers),
           id = proplists:get_value(<<"Message-Id">>, Headers),
           subject = proplists:get_value(<<"Subject">>, Headers)

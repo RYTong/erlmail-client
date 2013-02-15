@@ -48,14 +48,15 @@
                      render  %% <<"inline">>|<<"attachment">>
                     }).
 
--record(mail, {from,
-               to,
-               date,
-               id,
-               subject,
-               content,
-               attachements %% [attachment()]
-  }).
+-record(mail, {from,       %% binary()
+               to,         %% [binary()]
+               cc,         %% [binary()]
+               date,       %% binary()
+               id,         %% binary()
+               subject,    %% binary()
+               content,    %% binary()
+               attachments %% [attachment()]
+              }).
 
 
 
