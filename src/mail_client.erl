@@ -95,6 +95,7 @@ send(Fsm, From, To, Cc, Subject, Body, Attatchments) ->
     [smtpc:rcpt(Fsm, Address)|| Address<-To],
     [smtpc:rcpt(Fsm, Address)|| Address<-Cc],
     Mail = encode_mail(From, To, Cc, Subject, Body, Attatchments),
+    ?D(Mail),
     smtpc:data(Fsm, binary_to_list(Mail)),
     ok.
 
@@ -102,6 +103,8 @@ send(Fsm, From, To, Cc, Subject, Body, Attatchments) ->
 %%
 %% API Functions
 %%
+
+
 
 raw_message_to_mail(RawMessage) when is_list(RawMessage) ->
     {Type, SubType, Headers, Properties, Body} = 
@@ -135,7 +138,23 @@ encode_mail(From, To, Cc, Subject, Body, []) ->
     mimemail:encode(Email);
 
 encode_mail(From, To, Cc, Subject, Body, Attatchments) ->
-    to_do.
+    ToList = [{<<"To">>, list_to_binary(Address)}|| Address <-To],
+    CcList = [{<<"Cc">>, list_to_binary(Address)}|| Address <-Cc],
+    Headers = [{<<"From">>, list_to_binary(From)},
+               {<<"Subject">>, list_to_binary(Subject)},
+               {<<"MIME-Version">>, <<"1.0">>}] ++ ToList ++ CcList,
+    BodyPart = {<<"text">>, <<"plain">>, Headers,
+                [{<<"content-type-params">>,
+                  [{<<"charset">>,<<"UTF-8">>}],
+                  {<<"disposition">>,<<"inline">>}}],
+                list_to_binary(Body)},
+    AttachPart = attach_to_mime(Attatchments, []),
+    MimeMail = {<<"multipart">>, <<"mixed">>, Headers,
+                [{<<"content-type-params">>,
+                  [{<<"charset">>,<<"UTF-8">>}],
+                  {<<"disposition">>,<<"inline">>}}],
+                [BodyPart|AttachPart]},
+    mimemail:encode(MimeMail).
 
 decode_body({Type, SubType, Headers, Properties, Body}) ->
     #mimemail{type = Type, 
@@ -274,6 +293,40 @@ parse_header(Headers) ->
             "filename=" ++ Name = File,
             list_to_binary(Name)
     end.
+
+%% attachment
+attach_to_mime([], Res) ->
+    lists:reverse(Res);
+attach_to_mime([{Name, Content}|T], Res) ->
+    attach_to_mime(T, [attachment(Name, Content)|Res]).
+
+attachment(FileName, Content) when is_list(FileName) ->
+    attachment(list_to_binary(FileName), Content);
+attachment(FileName, Content) when is_list(Content) ->
+    attachment(FileName, list_to_binary(Content));
+attachment(FileName, Content) when is_binary(FileName), is_binary(Content) ->
+    {Type, Subtype, Render} = from_ext(FileName),
+    Headers = [{<<"Content-Disposition">>,
+                <<Render/binary, ";filename=", FileName/binary>>},
+               {<<"Content-Type">>,
+                <<"text/plain">>}],
+    Properties = [{<<"content-type-params">>,
+                   [{<<"name">>,FileName}]},
+                  {<<"disposition">>,Render},
+                  {<<"disposition-params">>,
+                   [{<<"filename">>,FileName}]}],
+    {Type, Subtype, Headers, Properties, Content}.
+
+from_ext(FileName) ->
+    ?D(FileName),
+    to_do,
+    {<<"text">>, <<"plain">>, <<"attachment">>}.
+
+
+
+
+
+    
            
 
 
