@@ -54,8 +54,8 @@
                date,       %% binary()
                id,         %% binary()
                subject,    %% binary()
-               content,    %% binary()
-               attachments %% [attachment()]
+               content,    %% binary() | [binary()] |{html, binary()} |[binary()|{html, binary()}]
+               attachments  = []%% [attachment()]
               }).
 
 
