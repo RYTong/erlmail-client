@@ -29,8 +29,13 @@ raw_message_to_mail(RawMessage) ->
 raw_message_to_mail(RawMessage, SubTypeWanted) when is_list(RawMessage) ->
     raw_message_to_mail(list_to_binary(RawMessage), SubTypeWanted);
 raw_message_to_mail(RawMessage, SubTypeWanted) when is_binary(RawMessage) ->
-    {Type, SubType, Headers, Properties, Body} = 
-        mimemail:decode((RawMessage), [{encoding, <<"utf8">>}]),
+    {Type, SubType, Headers, Properties, Body} = try
+                                                     mimemail:decode((RawMessage), [{encoding, <<"utf8">>}])
+                                                 catch ErrType:Err ->
+                                                           ?D({ErrType, Err}),
+                                                           mimemail:decode(RawMessage)
+                                                 end,
+                                                           
     TypeWanted = case SubTypeWanted of
                      html -> <<"html">>;
                      _ -> <<"plain">>
