@@ -220,8 +220,19 @@ parse_header(Headers) ->
             undefined;
         B -> 
             ?D(B),
-            [_Inline, File|_] = string:tokens(binary_to_list(B), ";"),
-            "filename=" ++ Name = File,
-            list_to_binary(Name)
+            case string:tokens(binary_to_list(B), ";") of
+                ["attachment"|Params] ->
+                    get_filename(Params);
+                _ ->
+                    undefined 
+            end
     end.
+
+get_filename(["filename=" ++ Name|_T]) ->
+    list_to_binary(Name);
+get_filename([]) ->
+    <<"attachment">>;
+get_filename([_H|T]) ->
+    get_filename(T).
+
 
