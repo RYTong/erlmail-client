@@ -23,17 +23,22 @@
 %%
 
 
-encode_mail(From, To, Cc, Subject, Body, []) ->
+encode_mail(From, To, Cc, Subject, Body, []) when is_list(Body), is_integer(hd(Body)) ->
     ToList = [{<<"To">>, list_to_binary(Address)}|| Address <-To],
     CcList = [{<<"Cc">>, list_to_binary(Address)}|| Address <-Cc],
     Headers = [{<<"From">>, list_to_binary(From)},
                {<<"Subject">>, list_to_binary(Subject)},
                {<<"MIME-Version">>, <<"1.0">>}] ++ ToList ++ CcList,
-    Email = {<<"text">>, <<"plain">>, Headers,
-             [{<<"content-type-params">>,
-               [{<<"charset">>,<<"UTF-8">>}],
-               {<<"disposition">>,<<"inline">>}}],
-             list_to_binary(Body)},
+    Email = body_to_mime(Body, Headers),
+    mimemail:encode(Email);
+
+encode_mail(From, To, Cc, Subject, {html, _Content} = Body , []) ->
+    ToList = [{<<"To">>, list_to_binary(Address)}|| Address <-To],
+    CcList = [{<<"Cc">>, list_to_binary(Address)}|| Address <-Cc],
+    Headers = [{<<"From">>, list_to_binary(From)},
+               {<<"Subject">>, list_to_binary(Subject)},
+               {<<"MIME-Version">>, <<"1.0">>}] ++ ToList ++ CcList,
+    Email = body_to_mime(Body, Headers),
     mimemail:encode(Email);
 
 encode_mail(From, To, Cc, Subject, Body, Attatchments) ->
@@ -42,17 +47,19 @@ encode_mail(From, To, Cc, Subject, Body, Attatchments) ->
     Headers = [{<<"From">>, list_to_binary(From)},
                {<<"Subject">>, list_to_binary(Subject)},
                {<<"MIME-Version">>, <<"1.0">>}] ++ ToList ++ CcList,
-    BodyPart = {<<"text">>, <<"plain">>, Headers,
-                [{<<"content-type-params">>,
-                  [{<<"charset">>,<<"UTF-8">>}],
-                  {<<"disposition">>,<<"inline">>}}],
-                list_to_binary(Body)},
+    BodyPart = body_to_mime(Body, []),
     AttachPart = attach_to_mime(Attatchments, []),
+    FinalBody = case is_tuple(BodyPart) of
+                    true ->
+                        [BodyPart|AttachPart];
+                    _ ->
+                        BodyPart ++ AttachPart
+                end,
     MimeMail = {<<"multipart">>, <<"mixed">>, Headers,
                 [{<<"content-type-params">>,
                   [{<<"charset">>,<<"UTF-8">>}],
                   {<<"disposition">>,<<"inline">>}}],
-                [BodyPart|AttachPart]},
+                FinalBody},
     mimemail:encode(MimeMail).
 
 
@@ -60,6 +67,27 @@ encode_mail(From, To, Cc, Subject, Body, Attatchments) ->
 %%
 %% Local Functions
 %%
+
+%% Case for text/html
+body_to_mime({html, Content}, Headers) ->
+    {<<"text">>, <<"html">>, Headers,
+     [{<<"content-type-params">>,
+       [{<<"charset">>,<<"UTF-8">>}],
+       {<<"disposition">>,<<"inline">>}}],
+     list_to_binary(Content)};
+%% Case for text/plain
+body_to_mime(Content, Headers) when is_list(Content), is_integer(hd(Content))->
+    {<<"text">>, <<"plain">>, Headers,
+     [{<<"content-type-params">>,
+       [{<<"charset">>,<<"UTF-8">>}],
+       {<<"disposition">>,<<"inline">>}}],
+     list_to_binary(Content)};
+%% Case for mixed text contains both plain and html
+body_to_mime({mixed, List}, Headers) ->
+    [body_to_mime(Item, Headers)||Item<-List].
+
+
+    
 
 %% attachment
 attach_to_mime([], Res) ->
