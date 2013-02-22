@@ -108,7 +108,10 @@ smtp_cmd({ehlo, Name}, From, State) ->
     case read(State#smtpc.socket) of
         {250, Resp} ->
             ?D({250, Resp}),
-            NewState = lists:foldl(fun("250-AUTH" ++ Rest, Acc) ->
+            NewState = lists:foldl(fun("250-AUTH=" ++ Rest, Acc) ->
+                                           AuthTypes = string:tokens(Rest, " "),
+                                           Acc#smtpc{auth = AuthTypes, state = auth};
+                                      ("250-AUTH" ++ Rest, Acc) ->
                                            AuthTypes = string:tokens(Rest, " "),
                                            Acc#smtpc{auth = AuthTypes, state = auth};
                                       ("250"++ Feature, Acc) ->
@@ -417,10 +420,11 @@ smtp_type(RespText) ->
 type(AuthTypes) ->
     case lists:member("PLAIN", AuthTypes) of
         true -> 'plain';
-        _ ->  case lists:member("LOGIN", AuthTypes) of
-                  true -> 'login';
-                  _ -> other
-              end
+        _ ->  
+            case lists:member("LOGIN", AuthTypes) of
+                true -> 'login';
+                _ -> other
+            end
     end.              
 
 auth_plain(User, Password, Socket) ->
@@ -438,6 +442,30 @@ auth_plain(User, Password, Socket) ->
             {error, Err}
     end.
 
-auth_login(_User, _Password, _Socket) ->
-    to_do.
+auth_login(User, Password, Socket) ->
+    Login = "AUTH LOGIN",
+    write(Socket, Login),
+    case read(Socket) of
+        {334, "VXNlcm5hbWU6\r\n"} ->
+            U = base64:encode(User),
+            ?D({user, User, U}),
+            write(Socket, binary_to_list(U)),
+            case read(Socket) of
+                {334, "UGFzc3dvcmQ6\r\n"} ->
+                    P = base64:encode(Password),
+                    write(Socket, binary_to_list(P)),
+                    case read(Socket) of
+                        {235, Resp} ->
+                            ?D(Resp),
+                            ok;
+                        Err ->
+                            {error,Err}
+                    end;
+                Err1 ->
+                    {error,Err1}
+            end;
+        Err2 ->
+            {error,Err2}
+    end.
+
 
