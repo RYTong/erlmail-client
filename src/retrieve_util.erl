@@ -33,7 +33,7 @@ raw_message_to_mail(RawMessage, SubTypeWanted) when is_binary(RawMessage) ->
                                                      mimemail:decode((RawMessage), [{encoding, <<"utf8">>}])
                                                  catch ErrType:Err ->
                                                            ?D({ErrType, Err}),
-                                                           mimemail:decode(RawMessage, [{encoding, none}}])
+                                                           mimemail:decode(RawMessage, [{encoding, none}])
                                                  end,
                                                            
     TypeWanted = case SubTypeWanted of
@@ -106,7 +106,9 @@ mime_to_mail(#mimemail{headers = Headers} = Mime, TypeWanted) ->
 get_headers(Headers) ->
     #mail{from = proplists:get_value(<<"From">>, Headers),
           to = proplists:get_all_values(<<"To">>, Headers),
-          cc = proplists:get_all_values(<<"Cc">>, Headers),
+          cc = proplists:get_all_values(<<"Cc">>, Headers) ++ 
+                   proplists:get_all_values(<<"CC">>, Headers),
+          bcc = proplists:get_all_values(<<"Bcc">>, Headers),
           date = proplists:get_value(<<"Date">>, Headers),
           id = proplists:get_value(<<"Message-ID">>, Headers),
           subject = proplists:get_value(<<"Subject">>, Headers)

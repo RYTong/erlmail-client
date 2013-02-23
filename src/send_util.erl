@@ -16,37 +16,26 @@
 %%
 %% Exported Functions
 %%
--export([encode_mail/6]).
+-export([encode_mail/7]).
 
 %%
 %% API Functions
 %%
 
 
-encode_mail(From, To, Cc, Subject, Body, []) when is_list(Body), is_integer(hd(Body)) ->
-    ToList = [{<<"To">>, list_to_binary(Address)}|| Address <-To],
-    CcList = [{<<"Cc">>, list_to_binary(Address)}|| Address <-Cc],
-    Headers = [{<<"From">>, list_to_binary(From)},
-               {<<"Subject">>, list_to_binary(Subject)},
-               {<<"MIME-Version">>, <<"1.0">>}] ++ ToList ++ CcList,
+encode_mail(From, To, Cc, Bcc, Subject, Body, []) when is_list(Body), is_integer(hd(Body)) ->
+    Headers = gen_headers(From, To, Cc, Bcc, Subject),
+    ?D({headers, Headers}),
     Email = body_to_mime(Body, Headers),
     mimemail:encode(Email);
 
-encode_mail(From, To, Cc, Subject, {html, _Content} = Body , []) ->
-    ToList = [{<<"To">>, list_to_binary(Address)}|| Address <-To],
-    CcList = [{<<"Cc">>, list_to_binary(Address)}|| Address <-Cc],
-    Headers = [{<<"From">>, list_to_binary(From)},
-               {<<"Subject">>, list_to_binary(Subject)},
-               {<<"MIME-Version">>, <<"1.0">>}] ++ ToList ++ CcList,
+encode_mail(From, To, Cc, Bcc, Subject, {html, _Content} = Body , []) ->
+    Headers = gen_headers(From, To, Cc, Bcc, Subject),
     Email = body_to_mime(Body, Headers),
     mimemail:encode(Email);
 
-encode_mail(From, To, Cc, Subject, Body, Attatchments) ->
-    ToList = [{<<"To">>, list_to_binary(Address)}|| Address <-To],
-    CcList = [{<<"Cc">>, list_to_binary(Address)}|| Address <-Cc],
-    Headers = [{<<"From">>, list_to_binary(From)},
-               {<<"Subject">>, list_to_binary(Subject)},
-               {<<"MIME-Version">>, <<"1.0">>}] ++ ToList ++ CcList,
+encode_mail(From, To, Cc, Bcc, Subject, Body, Attatchments) ->
+    Headers = gen_headers(From, To, Cc, Bcc, Subject),
     BodyPart = body_to_mime(Body, []),
     AttachPart = attach_to_mime(Attatchments, []),
     FinalBody = case is_tuple(BodyPart) of
@@ -67,6 +56,16 @@ encode_mail(From, To, Cc, Subject, Body, Attatchments) ->
 %%
 %% Local Functions
 %%
+gen_headers(From, To, Cc, Bcc, Subject) ->
+    ToList = [{<<"To">>, list_to_binary(Address)}|| Address <-To],
+    ?D({To, ToList}),
+    CcList = [{<<"Cc">>, list_to_binary(Address)}|| Address <-Cc],
+    ?D({Cc, CcList}),
+    BccList = [{<<"Bcc">>, list_to_binary(Address)}|| Address <-Bcc],
+    ?D({Bcc, BccList}),
+    [{<<"From">>, list_to_binary(From)},
+     {<<"Subject">>, list_to_binary(Subject)},
+     {<<"MIME-Version">>, <<"1.0">>}] ++ ToList ++ CcList ++ BccList.
 
 %% Case for text/html
 body_to_mime({html, Content}, Headers) ->

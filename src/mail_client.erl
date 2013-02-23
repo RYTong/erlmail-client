@@ -23,6 +23,7 @@
          retrieve/3,
          open_send_session/5,
          close_send_session/1,
+         send/8,
          send/7
         ]).
 
@@ -107,14 +108,21 @@ close_send_session(Fsm) ->
     end.
 
 send(Fsm, From, To, Cc, Subject, Body, Attatchments) ->
+    send(Fsm, From, To, Cc, [], Subject, Body, Attatchments).
+
+send(Fsm, From, To, Cc, Bcc, Subject, Body, Attatchments) ->
     ?D(From),
     smtpc:mail(Fsm, From),
     [smtpc:rcpt(Fsm, Address)|| Address<-To],
     [smtpc:rcpt(Fsm, Address)|| Address<-Cc],
-    Mail = send_util:encode_mail(From, To, Cc, Subject, Body, Attatchments),
+    [smtpc:rcpt(Fsm, Address)|| Address<-Bcc],
+    Mail = send_util:encode_mail(From, To, Cc, Bcc, Subject, Body, Attatchments),
     ?D(Mail),
     smtpc:data(Fsm, binary_to_list(Mail)),
     ok.
+
+
+    
 
 
 
