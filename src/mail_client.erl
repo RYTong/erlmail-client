@@ -17,6 +17,7 @@
 %%
 -export([open_retrieve_session/5,
          close_retrieve_session/1,
+         list_size/1,
          list/1,
          retrieve/2,
          retrieve/3,
@@ -48,6 +49,15 @@ close_retrieve_session(Fsm) ->
             ok
     end.
 
+
+list_size(Fsm) ->
+    case popc:list(Fsm) of
+        {ok, RawList} ->
+            {ok, get_total_number(RawList)};
+        Err ->
+            ?D(Err),
+            Err
+    end.
 
 list(Fsm) ->
     case popc:list(Fsm) of

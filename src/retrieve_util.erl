@@ -33,7 +33,7 @@ raw_message_to_mail(RawMessage, SubTypeWanted) when is_binary(RawMessage) ->
                                                      mimemail:decode((RawMessage), [{encoding, <<"utf8">>}])
                                                  catch ErrType:Err ->
                                                            ?D({ErrType, Err}),
-                                                           mimemail:decode(RawMessage)
+                                                           mimemail:decode(RawMessage, [{encoding, none}}])
                                                  end,
                                                            
     TypeWanted = case SubTypeWanted of
