@@ -51,6 +51,7 @@
 -record(mail, {from,       %% binary()
                to,         %% [binary()]
                cc,         %% [binary()]
+               bcc,
                date,       %% binary()
                id,         %% binary()
                subject,    %% binary()

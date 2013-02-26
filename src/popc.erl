@@ -31,6 +31,8 @@
          connect/3,
          login/3,
          stat/1,
+         capa/1,
+         top/3,
          list/1,
          list/2,
          delete/2,
@@ -50,12 +52,19 @@ connect(IpAddress, Port, Options) ->
     popc_fsm:start(IpAddress, Port, Options).
 
 
+
 %% return : ok | {error, Err}
 login(Pid, User, Password) ->
     gen_fsm:sync_send_event(Pid, {auth, User, Password}, infinity).
 
 stat(Pid) ->
-     gen_fsm:sync_send_event(Pid, stat, infinity).
+    gen_fsm:sync_send_event(Pid, stat, infinity).
+
+capa(Pid) ->
+    gen_fsm:sync_send_event(Pid, capa, infinity).
+
+top(Pid, MessageId, LineNum) ->
+    gen_fsm:sync_send_event(Pid, {top, MessageId, LineNum}, infinity). 
 
 list(Pid) ->
     gen_fsm:sync_send_event(Pid, list, infinity).

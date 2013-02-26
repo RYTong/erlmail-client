@@ -177,7 +177,41 @@ start(Host,Port, Options) -> gen_fsm:start(?MODULE, [Host,Port, Options], []).
             {reply, {error,Err}, 'POPC_CMD', State};
         {ok, Data} ->
             {reply, {ok, Data}, 'POPC_CMD', State}
+    end;
+
+%% CAPA Command
+
+'POPC_CMD'(capa, _From, #popc_fsm{socket = S                                 
+                                 } = State) ->
+    StatCmd = "CAPA",
+    ok = write(S, StatCmd),
+    ?D(StatCmd),
+    case response(S) of
+        {error, Err} ->
+            {reply, {error,Err}, 'POPC_CMD', State};
+        {ok, Data} ->
+            Res = case parse_multi_line(Data, S) of
+                      {ok, Raw} -> get_mime(Raw);
+                      Err -> ?D(Err), Err
+                  end,
+            {reply, Res, 'POPC_CMD', State}
+    end;
+
+%% TOP Command
+'POPC_CMD'({top, MessageId, LineNum}, _From, #popc_fsm{socket = S,
+                                               state = transaction
+                                              } = State) ->
+    ?D({top, {MessageId, LineNum}}),
+    TopCmd = lists:concat(["TOP ", MessageId, " ", LineNum]),
+    ok = write(S, TopCmd),
+    ?D(TopCmd),
+    case response(S) of
+        {error, Err} ->
+            {reply, {error,Err}, 'POPC_CMD', State};
+        {ok, Data} -> 
+            {reply, {ok, Data}, 'POPC_CMD', State}
     end.
+
 
 %%%----------------------------------------------------------------------
 %%% Callback functions from gen_fsm

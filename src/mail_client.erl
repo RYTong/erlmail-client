@@ -17,10 +17,13 @@
 %%
 -export([open_retrieve_session/5,
          close_retrieve_session/1,
+         pop_capabilities/1,
          list_size/1,
          list/1,
          retrieve/2,
          retrieve/3,
+         top/3,
+         top/4,
          open_send_session/5,
          close_send_session/1,
          send/8,
@@ -87,7 +90,28 @@ retrieve(Fsm, MessageId, Type) ->
             Err
     end.
 
+top(Fsm, MessageId, LineNum) ->
+    top(Fsm, MessageId, LineNum, plain).
 
+top(Fsm, MessageId, LineNum, Type) ->
+    to_do.
+    % case popc:top(Fsm, MessageId, LineNum) of
+    %     {ok, RawMessage} ->
+    %         retrieve_util:raw_message_to_mail(RawMessage, Type);
+    %     Err ->
+    %         ?D(Err),
+    %         Err
+    % end.
+
+%% Get pop3 server capabilities.
+pop_capabilities(Fsm) ->
+    case popc:capa(Fsm) of
+        {ok, RawList} ->
+            {ok, parse_raw_list(RawList)};
+        Err ->
+            ?D(Err),
+            Err
+    end.
 
 %% Send APIs
 
@@ -135,6 +159,9 @@ get_total_number(Raw) ->
     Index = string:str(Raw, ?CRLF),
     [Num|_] = string:tokens(string:substr(Raw, 1, Index -1), " "),
     list_to_integer(Num).
+
+parse_raw_list(Raw) ->
+    string:tokens(Raw, "\r\n").
 
 
 
