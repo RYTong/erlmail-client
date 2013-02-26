@@ -55,6 +55,8 @@
 
 -export([encode/1, decode/2, decode/1, get_header_value/2, get_header_value/3, parse_headers/1]).
 
+-export([decode_headers/2]). % XXX: 
+
 -define(DEFAULT_OPTIONS, [
 		{encoding, get_default_encoding()}, % default encoding is utf-8 if we can find the iconv module
 		{decode_attachments, true} % should we decode any base64/quoted printable attachments?
@@ -122,12 +124,20 @@ encode(_) ->
 	io:format("Not a mime-decoded DATA~n"),
 	erlang:error(non_mime).
 
+-spec(decode_headers/2 :: (EmailHeaders :: binary(), Encoding :: string()) -> list()).
+%% @doc Decode headers that returned by 'TOP' command.
+decode_headers(Headers, Encoding) when is_list(Headers) ->
+	decode_headers(list_to_binary(Headers), Encoding);
+decode_headers(Headers, Encoding) when is_binary(Headers) ->
+	{H, _} = parse_headers(Headers),
+	decode_headers(H, [], Encoding).
 
 decode_headers(Headers, _, none) ->
 	Headers;
 decode_headers([], Acc, _Charset) ->
 	lists:reverse(Acc);
 decode_headers([{Key, Value} | Headers], Acc, Charset) ->
+	io:format(" **decode: ~p~n", [{Key, Value}]), 
 	decode_headers(Headers, [{Key, decode_header(Value, Charset)} | Acc], Charset).
 
 decode_header(Value, Charset) ->
@@ -822,6 +832,8 @@ get_default_encoding() ->
 % convert some common invalid character names into the correct ones
 fix_encoding(Encoding) when Encoding == <<"utf8">>; Encoding == <<"UTF8">> ->
 	<<"UTF-8">>;
+fix_encoding(Encoding) when Encoding == <<"GBK">>; Encoding == <<"gbk">>; Encoding == <<"gb2312">>; Encoding == <<"GB2312">> ->
+	<<"GB18030">>;
 fix_encoding(Encoding) ->
 	Encoding.
 
