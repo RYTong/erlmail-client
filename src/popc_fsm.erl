@@ -209,7 +209,11 @@ start(Host,Port, Options) -> gen_fsm:start(?MODULE, [Host,Port, Options], []).
         {error, Err} ->
             {reply, {error,Err}, 'POPC_CMD', State};
         {ok, Data} -> 
-            {reply, {ok, Data}, 'POPC_CMD', State}
+            Res = case parse_multi_line(Data, S) of
+                      {ok, Raw} -> get_mime(Raw);
+                      Err -> ?D(Err), Err
+                  end,
+            {reply, Res, 'POPC_CMD', State}
     end.
 
 

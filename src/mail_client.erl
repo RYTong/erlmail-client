@@ -22,8 +22,7 @@
          list/1,
          retrieve/2,
          retrieve/3,
-         top/3,
-         top/4,
+         top/2,
          open_send_session/5,
          close_send_session/1,
          send/8,
@@ -90,18 +89,14 @@ retrieve(Fsm, MessageId, Type) ->
             Err
     end.
 
-top(Fsm, MessageId, LineNum) ->
-    top(Fsm, MessageId, LineNum, plain).
-
-top(Fsm, MessageId, LineNum, Type) ->
-    to_do.
-    % case popc:top(Fsm, MessageId, LineNum) of
-    %     {ok, RawMessage} ->
-    %         retrieve_util:raw_message_to_mail(RawMessage, Type);
-    %     Err ->
-    %         ?D(Err),
-    %         Err
-    % end.
+top(Fsm, MessageId) ->
+    case popc:top(Fsm, MessageId, 0) of
+        {ok, RawMessage} ->
+            mimemail:decode_headers(RawMessage, <<"utf8">>);
+        Err ->
+            ?D(Err),
+            Err
+    end.
 
 %% Get pop3 server capabilities.
 pop_capabilities(Fsm) ->
