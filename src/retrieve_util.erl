@@ -219,7 +219,7 @@ get_filename(Headers, Properties) ->
                            Name -> Name 
                        end
                end,
-    {Inline, Filename}.
+    {Inline, decode_filename(Filename)}.
 
 parse_header(Headers) ->
     case  proplists:get_value(<<"Content-Disposition">>, Headers) of
@@ -229,7 +229,7 @@ parse_header(Headers) ->
             ?D(B),
             case string:tokens(binary_to_list(B), ";") of
                 ["attachment"|Params] ->
-                    get_filename(Params);
+                    decode_filename(get_filename(Params));
                 _ ->
                     undefined 
             end
@@ -242,4 +242,10 @@ get_filename([]) ->
 get_filename([_H|T]) ->
     get_filename(T).
 
-
+%% XXX:We should also decode the filename, for it may be encoded-word.
+decode_filename(List) when is_list(List) ->
+    decode_filename(list_to_binary(List));
+decode_filename(Binary) when is_binary(Binary) ->
+    mimemail:decode_header(Binary, <<"utf8">>);
+decode_filename(Other) ->
+    Other.
