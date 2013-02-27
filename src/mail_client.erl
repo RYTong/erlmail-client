@@ -17,10 +17,12 @@
 %%
 -export([open_retrieve_session/5,
          close_retrieve_session/1,
+         pop_capabilities/1,
          list_size/1,
          list/1,
          retrieve/2,
          retrieve/3,
+         top/2,
          open_send_session/5,
          close_send_session/1,
          send/8,
@@ -87,7 +89,24 @@ retrieve(Fsm, MessageId, Type) ->
             Err
     end.
 
+top(Fsm, MessageId) ->
+    case popc:top(Fsm, MessageId, 0) of
+        {ok, RawMessage} ->
+            mimemail:decode_headers(RawMessage, <<"utf8">>);
+        Err ->
+            ?D(Err),
+            Err
+    end.
 
+%% Get pop3 server capabilities.
+pop_capabilities(Fsm) ->
+    case popc:capa(Fsm) of
+        {ok, RawList} ->
+            {ok, parse_raw_list(RawList)};
+        Err ->
+            ?D(Err),
+            Err
+    end.
 
 %% Send APIs
 
@@ -135,6 +154,9 @@ get_total_number(Raw) ->
     Index = string:str(Raw, ?CRLF),
     [Num|_] = string:tokens(string:substr(Raw, 1, Index -1), " "),
     list_to_integer(Num).
+
+parse_raw_list(Raw) ->
+    string:tokens(Raw, "\r\n").
 
 
 
