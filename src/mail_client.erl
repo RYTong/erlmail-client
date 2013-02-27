@@ -22,6 +22,7 @@
          list/1,
          retrieve/2,
          retrieve/3,
+         list_top/1,
          top/2,
          open_send_session/5,
          close_send_session/1,
@@ -57,6 +58,21 @@ list_size(Fsm) ->
     case popc:list(Fsm) of
         {ok, RawList} ->
             {ok, get_total_number(RawList)};
+        Err ->
+            ?D(Err),
+            Err
+    end.
+
+list_top(Fsm) ->
+    case popc:list(Fsm) of
+        {ok, RawList} ->
+            Num = get_total_number(RawList),
+            ?D(Num),
+            lists:map(fun(I) ->
+                              {ok, C} = popc:top(Fsm, I, 0),
+                              ?D({id, I}),
+                              {I, mimemail:decode_headers(C, <<"utf8">>)}
+                      end, lists:seq(1, Num));
         Err ->
             ?D(Err),
             Err

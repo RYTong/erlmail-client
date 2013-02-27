@@ -55,7 +55,7 @@
 
 -export([encode/1, decode/2, decode/1, get_header_value/2, get_header_value/3, parse_headers/1]).
 
--export([decode_headers/2]). % XXX: 
+-export([decode_headers/2, decode_header/2]). % XXX: 
 
 -define(DEFAULT_OPTIONS, [
 		{encoding, get_default_encoding()}, % default encoding is utf-8 if we can find the iconv module
@@ -137,7 +137,6 @@ decode_headers(Headers, _, none) ->
 decode_headers([], Acc, _Charset) ->
 	lists:reverse(Acc);
 decode_headers([{Key, Value} | Headers], Acc, Charset) ->
-	io:format(" **decode: ~p~n", [{Key, Value}]), 
 	decode_headers(Headers, [{Key, decode_header(Value, Charset)} | Acc], Charset).
 
 decode_header(Value, Charset) ->
