@@ -384,8 +384,13 @@ parse_headers(Body, Line, Headers) ->
 						true ->
 							FValue;
 						_ ->
-							% I couldn't figure out how to use a pure binary comprehension here :(
-							list_to_binary([ filter_non_ascii(C) || <<C:8>> <= FValue])
+							case is_utf8_encoded(FValue) of
+								true ->
+									FValue;
+								false ->
+									% I couldn't figure out how to use a pure binary comprehension here :(
+									list_to_binary([ filter_non_ascii(C) || <<C:8>> <= FValue])
+							end
 					end,
 					case binstr:strpos(Body, "\r\n") of
 						0 ->
@@ -404,6 +409,21 @@ filter_non_ascii(C) when (C > 31 andalso C < 127); C == 9 ->
 	<<C>>;
 filter_non_ascii(_C) ->
 	<<"?">>.
+
+is_utf8_encoded(C) ->
+	try
+		{ok, CD} = iconv:open(<<"utf8">>, <<"utf8">>),
+		Result = 
+			case iconv:conv(CD, C) of
+				{ok, C} -> true;
+				_ -> false
+			end,
+		iconv:close(CD),
+		Result
+	catch
+		_:_ ->
+			false
+	end.
 
 decode_body(Type, Body, _InEncoding, none) ->
 	decode_body(Type, << <<X/integer>> || <<X>> <= Body, X < 128 >>);
