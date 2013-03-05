@@ -204,7 +204,9 @@ parse_body([Mime|T], R, Subtype) ->
 append([], R) ->
     R;
 append([H|T], R) ->
-    append(T, <<R/binary, H/binary>>).
+    append(T, <<R/binary, H/binary>>);
+append(B, R) when is_binary(B) ->
+    <<R/binary, B/binary>>.
 
 %% Get filename from Properties or Headers
 
