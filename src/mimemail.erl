@@ -380,14 +380,14 @@ parse_headers(Body, Line, Headers) ->
 				true ->
 					F2 = fun(X) -> (X > 31 andalso X < 127) orelse X == 9 end,
 					FValue = binstr:strip(binstr:substr(Line, Index+1)),
-					FieldValue = case binstr:all(F2, FValue) of
+					FieldValue = case is_utf8_encoded(FValue) of
 						true ->
 							FValue;
-						_ ->
-							case is_utf8_encoded(FValue) of
+						false ->
+							case binstr:all(F2, FValue) of
 								true ->
 									FValue;
-								false ->
+								_ ->
 									% I couldn't figure out how to use a pure binary comprehension here :(
 									list_to_binary([ filter_non_ascii(C) || <<C:8>> <= FValue])
 							end

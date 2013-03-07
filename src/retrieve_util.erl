@@ -9,7 +9,6 @@
 %% Include files
 %%
 
-
 -include("client.hrl").
 -include("mimemail.hrl").
 
@@ -91,7 +90,7 @@ mime_to_mail(#mimemail{type = <<"multipart">>,
                        body = Body} = Mime, TypeWanted) when is_list(Body) ->
     ?D(Mime),
     Mail = get_headers(Headers),                
-    {Content, Attatchments} =  parse_body(Body, {[], []}, TypeWanted),
+    {Content, Attatchments} =  parse_body(Body, TypeWanted),
     Mail#mail{content = Content,
               attachments = Attatchments};
 
@@ -99,7 +98,7 @@ mime_to_mail(#mimemail{type = <<"multipart">>,
 mime_to_mail(#mimemail{headers = Headers} = Mime, TypeWanted) ->
     ?D(Mime),
     Mail = get_headers(Headers),
-    {Content, Attatchments} = parse_body([Mime], {[], []}, TypeWanted),
+    {Content, Attatchments} = parse_body([Mime], TypeWanted),
     Mail#mail{content = Content,
               attachments = Attatchments}.
 
@@ -133,42 +132,49 @@ get_text([#mimemail{type = <<"text">>,
 get_text([_H|T], R, Subtype) ->
     get_text(T, R, Subtype).
 
-%% Parse the nested body
 
-parse_body([], {Content, AttachList}, <<"html">>) ->
+%% Parse the nested body
+parse_body(Body, TypeWanted) ->
+    {DeepContent, DeepAttachList} = do_parse_body(Body, {[], []}, TypeWanted),
+    parse_body_1(lists:flatten(DeepContent), lists:flatten(DeepAttachList), TypeWanted).
+
+parse_body_1(Content, AttachList, <<"html">>) ->
     {lists:reverse(Content), lists:reverse(AttachList)};  
 %% plain text is the wanted type
-parse_body([], {Content, AttachList}, <<"plain">>) ->
-    {append(Content,<<>>), lists:reverse(AttachList)}; 
-parse_body([#mimemail{type = <<"text">>,
+parse_body_1(Content, AttachList, <<"plain">>) ->
+    {append(Content,<<>>), lists:reverse(AttachList)}. 
+
+do_parse_body([], Acc, _SubType) ->
+    Acc;
+do_parse_body([#mimemail{type = <<"text">>,
                       subtype = <<"plain">>,
                       headers = Headers,
                       properties = Properties,
                       body = Body}|T], {Content, AttachList}, Subtype) when is_binary(Body) ->
     case get_filename(Headers, Properties) of 
-        {_, undefined} -> parse_body(T, {[Body|Content], AttachList}, Subtype);
+        {_, undefined} -> do_parse_body(T, {[Body|Content], AttachList}, Subtype);
         {Inline, Filename} ->
             Attach = #attachment{type = <<"text">>,
                                  subtype = <<"plain">>,
                                  name = Filename,
                                  content = Body,
                                  render = Inline},
-            parse_body(T, {Content, [Attach|AttachList]}, Subtype)
+            do_parse_body(T, {Content, [Attach|AttachList]}, Subtype)
     end;
-parse_body([#mimemail{type = <<"multipart">>,
+do_parse_body([#mimemail{type = <<"multipart">>,
                       subtype = <<"alternative">>,
                       body = Body}|T], {Content, AttachList}, Subtype) ->
     Text = get_text(Body, Subtype),
     %%     ?D({text, <<Content/binary, Text/binary>>, T}),
-    parse_body(T, {[Text|Content], AttachList}, Subtype);
+    do_parse_body(T, {[Text|Content], AttachList}, Subtype);
 
 %% 
-parse_body([#mimemail{type = <<"multipart">>,
+do_parse_body([#mimemail{type = <<"multipart">>,
                       body = Body}|T], {Content, AttachList}, Subtype) ->
-    R = parse_body(Body, {Content, AttachList}, Subtype),
-    parse_body(T, R, Subtype);
+    R = do_parse_body(Body, {Content, AttachList}, Subtype),
+    do_parse_body(T, R, Subtype);
 
-parse_body([#mimemail{type = <<"image">>,
+do_parse_body([#mimemail{type = <<"image">>,
                       subtype = ImageType,
                       headers = Headers,
                       properties = Properties,
@@ -179,8 +185,8 @@ parse_body([#mimemail{type = <<"image">>,
                                   name = Filename,
                                   content = Body,
                                   render = Inline},
-    parse_body(T, {Content, [ImageAttachment|AttachList]}, Subtype);
-parse_body([#mimemail{type = Type,
+    do_parse_body(T, {Content, [ImageAttachment|AttachList]}, Subtype);
+do_parse_body([#mimemail{type = Type,
                       subtype = SubType,
                       headers = Headers,
                       properties = Properties,
@@ -196,10 +202,10 @@ parse_body([#mimemail{type = Type,
                                      content = Body,
                                      render = Inline}
                  end,
-    parse_body(T, {Content, [Attachment|AttachList]}, Subtype);
-parse_body([Mime|T], R, Subtype) ->
+    do_parse_body(T, {Content, [Attachment|AttachList]}, Subtype);
+do_parse_body([Mime|T], R, Subtype) ->
     ?D({wrong_mimemail, Mime}),
-    parse_body(T, R, Subtype).
+    do_parse_body(T, R, Subtype).
 
 append([], R) ->
     R;
