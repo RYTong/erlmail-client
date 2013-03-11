@@ -142,12 +142,12 @@ decode_headers([{Key, Value} | Headers], Acc, Charset) ->
 
 collect_all_encoded_words(Value, CurPos, Encoding, Type, Acc) ->
 	case re:run(Value, "=\\?"++Encoding++"\\?"++Type++"\\?([^\s]+)\\?=", [ungreedy]) of
-		nomatch ->
-			{CurPos, Acc};
-		{match,[{AllStart, AllLen},{DataStart, DataLen}]} ->
+		{match,[{0, AllLen},{DataStart, DataLen}]} ->
 			Data = binstr:substr(Value, DataStart+1, DataLen),
-			RestValue = binstr:substr(Value, AllStart + AllLen + 1),
-			collect_all_encoded_words(RestValue, (CurPos + AllLen), Encoding, Type, [Data | Acc])
+			RestValue = binstr:substr(Value, AllLen + 1),
+			collect_all_encoded_words(RestValue, (CurPos + AllLen), Encoding, Type, [Data | Acc]);
+		_ ->
+			{CurPos, Acc}
 	end.
 
 decode_header(Value, Charset) ->
