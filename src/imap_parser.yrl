@@ -259,6 +259,9 @@ response_data -> string message_data :
 
 response_done -> string response_code command resp_text : 
 	#imap_resp{tag=v('$1'),status=v('$2'),info='$4',cmd=v('$3')}.
+response_done -> string response_code capability_data_list command resp_text : 
+	{_,Data} = '$3',
+	#imap_resp{tag=v('$1'),status=v('$2'),info='$5',cmd=v('$4'),data=Data}.
 response_done -> string response_code resp_text_code_list command resp_text : 
 	Cmd = v('$4'),
 	if

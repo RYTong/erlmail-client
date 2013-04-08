@@ -36,7 +36,6 @@
 -module(imapc_util).
 -author('sjackson@simpleenigma.com').
 
--include("client.hrl").
 -include("imap.hrl").
 
 -export([write/2,response/1,response/2]).
@@ -48,44 +47,40 @@
 
 
 write(Socket,Msg) -> 
-	Last = string:right(Msg,2),
-	case Last of
-		?CRLF -> gen_tcp:send(Socket,Msg);
-		_     -> gen_tcp:send(Socket,Msg ++ ?CRLF)
-	end.
+	socket_util:write(Socket, Msg).
 
 response(Socket) -> response(Socket,[],[]).
 response(Socket,Tag) -> response(Socket,Tag,[]).
 response(Socket,Tag,Response) ->
-	receive
-		{tcp, Socket, Bin}   -> 
-			NewResponse = process_line(Bin,Tag),
+    case socket_util:read(Socket) of
+        {error, _} = Err -> Err;
+        Data ->
+			NewResponse = process_line(list_to_binary(Data),Tag),
 			NextResponse = lists:append([Response,NewResponse]),
-			imapc_fsm:set_socket_opts(Socket),
+			%imapc_fsm:set_socket_opts(Socket),
 			case find_tag(NextResponse,to_low_atom(Tag)) of
 				true -> NextResponse;
 				false -> response(Socket,Tag,NextResponse)
-			end;
-			
-		{tcp_closed, Socket} -> {error,socket_closed}
-	end.
+			end
+    end.
 
 fetch_response(Socket,Tag) -> fetch_response(Socket,Tag,<<>>).
 fetch_response(Socket,Tag,Response) -> 
-	receive
-		{tcp, Socket, Bin}   -> 
-			NextResponse = <<Response/binary,Bin/binary>>,
+	case socket_util:read(Socket) of
+		{error, _} = Err -> Err;
+		Data ->
+			Bin = list_to_binary(Data),
+			NextResponse = <<Response/binary, Bin/binary>>,
 			LowTag = to_low_atom(Tag),
 			Tokens = string:tokens(binary_to_list(NextResponse),[13,10]),
 			Last = lists:last(Tokens),
-			imapc_fsm:set_socket_opts(Socket),
+			%imapc_fsm:set_socket_opts(Socket),
 			case catch process_line([Last],Tag) of
 				[#imap_resp{tag = LowTag}] -> 
 					FetchSplit = fetch_split(NextResponse),
 					process_line(FetchSplit,Tag,[]);
 				_ -> fetch_response(Socket,Tag,NextResponse)
-			end;
-		{tcp_closed, Socket} -> error
+			end
 	end.
 
 fetch_split(Binary) when is_binary(Binary) -> fetch_split(binary_to_list(Binary));
@@ -127,7 +122,8 @@ to_low_atom(String) ->  list_to_atom(http_util:to_lower(String)).
 process_line(Bin,Tag) when is_binary(Bin) -> process_line(string:tokens(binary_to_list(Bin),"\r\n"),Tag,[]);
 process_line(List,Tag)                    -> process_line(List,Tag,[]).
 process_line([H|T],Tag,Acc) ->
-	case parse(H) of
+	Ret = parse(H),
+	case Ret of
 		Resp when is_record(Resp,imap_resp) ->
 			process_line(T,Tag,[Resp|Acc]);
 		_ -> {error,bad_respsonse}

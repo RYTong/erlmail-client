@@ -35,10 +35,8 @@
 %%%---------------------------------------------------------------------------------------
 -module(imapc_fsm).
 -author('sjackson@simpleenigma.com').
--import(imapc_util).
 -behavior(gen_fsm). % Finite State Machine
 
--include("client.hrl").
 -include("imap.hrl").
 
 -define(CMD_TIMEOUT,   300000).
@@ -73,8 +71,8 @@ set_socket_opts(Socket) -> inet:setopts(Socket, [{active, once}, binary]).
 
 'IMAP_CMD'({socket_ready, Socket}, State) when is_port(Socket) ->
 	set_socket_opts(Socket),
-    {ok, {IP, _Port}} = inet:peername(Socket),
-    {next_state, 'IMAP_CMD', State#imapc_fsm{socket=Socket, peer=IP}, ?CMD_TIMEOUT};
+    %{ok, {IP, _Port}} = inet:peername(Socket),
+    {next_state, 'IMAP_CMD', State#imapc_fsm{socket=Socket}, ?CMD_TIMEOUT};
 
 'IMAP_CMD'(Data, State) ->
     io:format("~p Ignoring data: ~p\n", [self(), Data]),
@@ -137,6 +135,7 @@ set_socket_opts(Socket) -> inet:setopts(Socket, [{active, once}, binary]).
 %%%----------------------------------------------------------------------
 'IMAP_CMD'({login,Tag,UserName,Password}, _From, #imapc_fsm{socket = Socket,state = not_authenticated} = State) -> 
 	Cmd = Tag ++ [32] ++ "LOGIN" ++ [32] ++ UserName ++ [32] ++ Password,
+	?D(Cmd),
 	LowerTag = imapc_util:to_low_atom(Tag),
 	imapc_util:write(Socket,Cmd),
 	case imapc_util:response(Socket,Tag) of
@@ -663,17 +662,13 @@ set_socket_opts(Socket) -> inet:setopts(Socket, [{active, once}, binary]).
 init([Host,Port,Options]) ->
 	?D("Initializing FSM ..."),
     process_flag(trap_exit, true),
-	case gen_tcp:connect(Host,Port,[binary,{packet,0},{active,once}],infinity) of  %
-		{ok,Socket} ->
-			set_socket(self(),Socket),
-			case imapc_util:response(Socket) of
-				RespList when is_list(RespList) ->
-					{ok, 'IMAP_CMD', #imapc_fsm{}};
-				_R -> {stop, normal, #imapc_fsm{}}
-			end;
-		_Error -> {stop,conn_error}
-			
+	Socket = socket_util:connect(Host, Port, Options),
+	case imapc_util:response(Socket) of
+		RespList when is_list(RespList) ->
+			{ok, 'IMAP_CMD', #imapc_fsm{socket = Socket}};
+		_R -> {stop, normal, #imapc_fsm{}}
 	end.
+
 
 handle_event(close, _AnyState, IMAPC) ->
     ok = gen_tcp:send(IMAPC#imapc_fsm.socket, "quit\r\n"),

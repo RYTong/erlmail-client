@@ -53,7 +53,6 @@ write(#socket{fd = S,
 read(#socket{fd = S, 
              type = Type,
              timeout = T} = Socket) ->
-    ?D(Socket),
     Tag = case Type of 
               ssl -> ssl;
               _ -> tcp
@@ -97,4 +96,3 @@ do_get_options([{timeout, Timeout}|T], {Ssl, _}) ->
     do_get_options(T, {Ssl, Timeout});
 do_get_options([_H|T], Res) ->
     do_get_options(T, Res).
-

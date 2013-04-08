@@ -1,8 +1,10 @@
+-include("client.hrl").
+
 -define(IMAP_PORT, 143).
 -define(IMAPS_PORT, 993).
 
 -record(imapc_fsm,{
-	socket = [],
+	socket = #socket{},
 	state = not_authenticated,  % [not_authenticated,authenticated,selected,logout]
 	capability = [],
 	mailbox = [],
