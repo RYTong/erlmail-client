@@ -35,9 +35,8 @@
 %%%---------------------------------------------------------------------------------------
 -module(imapc).
 -author('simpleenigma@gmail.com').
--include("erlmail.hrl").
--include("client.hrl").
 
+-include("client.hrl").
 
 
 -export([append/3,append/4,append/5,capability/1,capability/2]).

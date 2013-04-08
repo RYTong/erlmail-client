@@ -1,23 +1,5 @@
--define(IMAP_PORT,143).
--define(server_idle_timeout, 30*1000).
-
--record(imapd_fsm,{
-	socket     = [],
-	addr       = [],
-	options    = [],
-	state      = not_authenticated,  % [not_authenticated,authenticated,selected,logout]
-	user       = [],
-	mailbox    = [],
-	mailbox_rw = false,
-	line       = [],
-	buff       = <<>>
-	}).
-
--record(imapd, {
-                listener,       % Listening socket
-                acceptor,       % Asynchronous acceptor's internal reference
-                module          % FSM handling module
-               }).
+-define(IMAP_PORT, 143).
+-define(IMAPS_PORT, 993).
 
 -record(imapc_fsm,{
 	socket = [],
@@ -41,22 +23,6 @@
 	info      = []
 	}).
 
--record(imap_cmd,{
-	tag  = [],
-	cmd  = [],
-	data = [],
-	line = []
-	}).
-
--record(imap_fetch_cmd,{
-	name     = [],
-	sections = [],
-	parts    = [],
-	start    = 0,
-	count    = 0,
-	string   = []
-	}).
-
 -record(mailbox,{
 	name        = [],
 	flags       = [],
@@ -70,6 +36,7 @@
 	myrights    = [],
 	readwrite   = false
 	}).
+
 
 -record(address,{
 	addr_name    = [],
@@ -139,44 +106,8 @@
 	loc = []
 	}).
 
--record(status,{
-	mailbox = [],
-	messages = [],
-	recent = [],
-	uidnext = [],
-	uidvalidity = [],
-	unseen = []
-	}).
-
-
-
 -record(folder,{
 	name = [],
 	delim = ".",
 	flags = []
 	}).
-
--record(tran,{
-	id   = [], % tag for request
-	from = [], % Process request is from
-	type = []  % client or server
-	}).
-
--record(imapd_connection,{
-	sock = [],
-    port = ?IMAP_PORT,
-    peer_addr = [],
-    peer_port = ?IMAP_PORT
-	}).
-
-
-% This record characterises the connection from the browser to our server
-% it is intended to be a consistent view derived from a bunch of different headers
--record(req, {connection=keep_alive,	        % keep_alive | close
-	      content_length,                   % Integer
-	      vsn,                              % {Maj,Min}
-	      method,                           % 'GET'|'POST'
-	      uri,				% Truncated URI /index.html
-              args="",                          % Part of URI after ?
-	      headers,				% [{Tag, Val}]
-	      body = <<>>}).			% Content Body

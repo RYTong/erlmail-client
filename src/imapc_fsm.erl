@@ -35,10 +35,11 @@
 %%%---------------------------------------------------------------------------------------
 -module(imapc_fsm).
 -author('sjackson@simpleenigma.com').
--include("imap.hrl").
--include("client.hrl").
 -import(imapc_util).
 -behavior(gen_fsm). % Finite State Machine
+
+-include("client.hrl").
+-include("imap.hrl").
 
 -define(CMD_TIMEOUT,   300000).
 

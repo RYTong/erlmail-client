@@ -29,6 +29,8 @@
 -author('cao.xu@rytong.com').
 
 -include("client.hrl").
+-include("pop.hrl").
+
 -behavior(gen_fsm). % Finite State Machine
 
 %% gen_fsm callbacks

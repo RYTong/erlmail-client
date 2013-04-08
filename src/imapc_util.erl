@@ -35,8 +35,9 @@
 %%%---------------------------------------------------------------------------------------
 -module(imapc_util).
 -author('sjackson@simpleenigma.com').
--include("imap.hrl").
+
 -include("client.hrl").
+-include("imap.hrl").
 
 -export([write/2,response/1,response/2]).
 -export([fetch_response/2,fetch_split/1]).

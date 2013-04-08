@@ -36,7 +36,9 @@
 -module(smtpc_fsm).
 -author('sjackson@simpleenigma.com').
 -behavior(gen_fsm). % Finite State Machine
+
 -include("client.hrl").
+-include("smtp.hrl").
 
 %% External Exports
 -export([start/1,
@@ -370,7 +372,7 @@ init([Server,Port, Options]) ->
     end.
 
 
-handle_event(close, _AnyState, #popc_fsm{socket = S}) ->
+handle_event(close, _AnyState, #smtpc{socket = S}) ->
     write(S, "QUIT"),
     {stop, i_have_quit, []}.
 
