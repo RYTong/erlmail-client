@@ -47,6 +47,7 @@
 
 
 write(Socket,Msg) -> 
+	?D(Msg),
 	socket_util:write(Socket, Msg).
 
 response(Socket) -> response(Socket,[],[]).
@@ -125,6 +126,7 @@ process_line([H|T],Tag,Acc) ->
 	Ret = parse(H),
 	case Ret of
 		Resp when is_record(Resp,imap_resp) ->
+			?D(Resp),
 			process_line(T,Tag,[Resp|Acc]);
 		_ -> {error,bad_respsonse}
 	end;
@@ -138,6 +140,7 @@ parse(Line) ->
 	end.
 
 imap_parse(Tokens) ->
+	?D(Tokens),
 	case catch imap_parser:parse(Tokens) of
 		{error,Reason} -> {error,Reason};
 		{'EXIT',_} ->

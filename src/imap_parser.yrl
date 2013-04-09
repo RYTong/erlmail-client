@@ -279,6 +279,7 @@ resp_text_code -> string resp_text_code : [v('$1'), '$2'].
 
 
 resp_text -> string : value_of('$1').
+resp_text -> integer : integer_to_list(v('$1')).
 resp_text -> response_code : value_of('$1').
 resp_text -> string resp_text : [value_of('$1'),[32],'$2'].
 
@@ -343,6 +344,7 @@ clean_resp_code_case(Code,Next,Tail) ->
 		uidvalidity -> {{uidvalidity,Next},Tail};
 		permanentflags -> {{permanentflags,Next},Tail};
 		myrights -> {{myrights,Next},Tail};
+		highestmodseq -> {{highestmodseq,Next},Tail};
 		_Other -> {Code,[Next|Tail]}
 	end.
 

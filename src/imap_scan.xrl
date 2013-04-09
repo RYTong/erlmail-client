@@ -60,6 +60,9 @@ Erlang code.
 %%% Check to see of this is a BODY[]<> command, use unquote and requote to hide then replace DQUOTE to formulat string properly
 %%% Regular Expression could be better.
 imap_string(String) ->
+	%io:format("string: ~p~n", [String]), 
+	put(imap_token_hd, hd(String)),
+	put(imap_token_pos, 0),
 	RegExp = "(([bB][oO][dD][yY])(\.[pP][eE][eE][kK])?)(\\\[(.)*\\\])(\\\<[0-9]+\\\>)?",
 	case re:run(String,RegExp) of
 		{match,_} ->
@@ -98,8 +101,10 @@ string_type(TokenChars,TokenLen) ->
 
 
 type(Token) ->
+	%io:format("token: ~p~n", [Token]), 
+	put(imap_token_pos, get(imap_token_pos)+1),
 	case string:to_integer(Token) of
-		{error,_Reason} -> Value = list_to_atom(http_util:to_lower(Token));
+		{error,_Reason} -> Value = list_to_atom(string:to_lower(Token));
 		{Value,_} -> ok
 	end,
 	case Value of
@@ -108,33 +113,42 @@ type(Token) ->
 		no           -> {response_code,Token};
 		bad          -> {response_code,Token};
 		bye          -> {response_code,Token};
-		append       -> {command,Token};
-		authenticate -> {command,Token};
-		capability   -> {command,Token};
-		check        -> {command,Token};
-		close        -> {command,Token};
-		copy         -> {command,Token};
-		delete       -> {command,Token};
-		examine      -> {command,Token};
-		expunge      -> {command,Token};
-		fetch        -> {command,Token};
-		list         -> {command,Token};
-		login        -> {command,Token};
-		logout       -> {command,Token};
-		lsub         -> {command,Token};
-		noop         -> {command,Token};
-		rename       -> {command,Token};
-		search       -> {command,Token};
-		select       -> {command,Token};
-		sort         -> {command,Token};
-		status       -> {command,Token};
-		store        -> {command,Token};
-		subscribe    -> {command,Token};
-		unsubscribe  -> {command,Token};
-		uid          -> {command,Token};
+		append       -> {token_type(),Token};
+		authenticate -> {token_type(),Token};
+		capability   -> {token_type(),Token};
+		check        -> {token_type(),Token};
+		close        -> {token_type(),Token};
+		copy         -> {token_type(),Token};
+		delete       -> {token_type(),Token};
+		examine      -> {token_type(),Token};
+		expunge      -> {token_type(),Token};
+		fetch        -> {token_type(),Token};
+		list         -> {token_type(),Token};
+		login        -> {token_type(),Token};
+		logout       -> {token_type(),Token};
+		lsub         -> {token_type(),Token};
+		noop         -> {token_type(),Token};
+		rename       -> {token_type(),Token};
+		search       -> {token_type(),Token};
+		select       -> {token_type(),Token};
+		sort         -> {token_type(),Token};
+		status       -> {token_type(),Token};
+		store        -> {token_type(),Token};
+		subscribe    -> {token_type(),Token};
+		unsubscribe  -> {token_type(),Token};
+		uid          -> {token_type(),Token};
 		Number when is_integer(Number) -> {integer,Number};
 		_  -> {string,Token}
 	end.
+
+token_type() ->
+	token_type(get(imap_token_hd), get(imap_token_pos)).
+
+token_type(42, Pos) when Pos <3 -> command;
+token_type(42, _) -> string;
+token_type(43, _) -> string;
+token_type(_, _) -> command.
+
 
 fetch_prep(String) ->
 	RegExp = "\{[0-9]+\}",
