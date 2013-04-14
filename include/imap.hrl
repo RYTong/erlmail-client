@@ -1,115 +1,47 @@
--include("client.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
--define(IMAP_PORT, 143).
--define(IMAPS_PORT, 993).
+-record(state_data, {socket,
+                     socket_type,
+                     enqueued_commands = [],
+                     server_capabilities = [],
+                     commands_pending_response = dict:new(),
+                     untagged_responses_received = []}).
 
--record(imapc_fsm,{
-	socket = #socket{},
-	state = not_authenticated,  % [not_authenticated,authenticated,selected,logout]
-	capability = [],
-	mailbox = [],
-	mail = [],
-	encrypt = plain,
-	peer = []
-	}).
+% uncomment this if you want to enable debug mode
+%-define(DEBUG, true).
 
--record(imap_resp,{
-	pid       = [], % needed for IMAP response server
-	mailbox   = [], % needed for IMAP response server
-	timestamp = [], % needed for IMAP response server
-	tag       = [],
-	status    = [], % OK, NO, BAD, PREAUTH, BYE
-	code      = [], % ALERT, BADCHARSET, CAPABILITY, PARSE, PERMANENTFLAGS, READ_ONLY, READ_WRITE, TRYCREATE, UIDNEXT, UIDVALIDITY, UNSEEN - found inside []
-	data      = [],
-	cmd       = [],
-	info      = []
-	}).
+-ifdef(debug).
+    -define(LOG_DEBUG(Format, Data), ?LOG_INFO("*** DEBUG ~p:~p " ++ Format ++ " ***", [?MODULE, ?LINE | Data])).
+    -define(LOG_ERROR(Fun, Format, Data), error_logger:error_msg("~p:~p(): " ++ Format ++ "~n", [?MODULE, Fun] ++ Data)).
+    -define(LOG_WARNING(Fun, Format, Data), error_logger:warning_msg("~p:~p(): " ++ Format ++ "~n", [?MODULE, Fun] ++ Data)).
+    -define(LOG_INFO(Format, Data), error_logger:info_msg(Format ++ "~n", Data)).
+-else.
+    -define(LOG_DEBUG(Format, Data), true).
+    -define(LOG_ERROR(Fun, Format, Data), true).
+    -define(LOG_WARNING(Fun, Format, Data), true).
+    -define(LOG_INFO(Format, Data), true).
+-endif.
+
+-define(t2b(T), term_to_binary(T)).
+-define(b2t(B), binary_to_term(B)).
+-define(l2b(L), list_to_binary(L)).
+-define(b2l(B), binary_to_list(B)).
+-define(l2a(L), list_to_atom(L)).
+-define(a2l(A), atom_to_list(A)).
+-define(l2i(L), list_to_integer(L)).
+-define(i2l(I), integer_to_list(I)).
 
 -record(mailbox,{
-	name        = [],
-	flags       = [],
-	permflags   = [],
-	exists      = 0,
-	messages    = 0,
-	recent      = 0,
-	unseen      = 0,
-	uidvalidity = 0,
-	uidnext     = 0,
-	myrights    = [],
-	readwrite   = false
-	}).
-
-
--record(address,{
-	addr_name    = [],
-	addr_adl     = [],
-	addr_mailbox = [],
-	addr_host    = []
-	}).
-
--record(envelope,{
-	date = [],
-	subject = [],
-	from = [],
-	sender = [],
-	reply_to = [],
-	to = [],
-	cc = [],
-	bcc = [],
-	in_reply_to = [],
-	message_id = []
-	}).
-
--record(fetch,{
-	seqnum = 0,
-	uid = [],
-	size = 0,
-	flags = [],
-	internaldate = [],
-	date = [],
-	subject = [],
-	from = [],
-	sender = [],
-	reply_to = [],
-	to = [],
-	cc = [],
-	bcc = [],
-	in_reply_to = [],
-	message_id = [],
-	body = [],
-	body_structure = [],
-	rfc822 = [],
-	rfc822_header = [],
-	rfc822_text = [],
-	parts = []
-	}).
-
--record(body,{
-	type = [],
-	parts = [],
-	md5 = [],
-	dsp = [],
-	lang = [],
-	loc = []
-	}).
-
--record(part,{
-	type = [],
-	subtype = [],
-	params = [],
-	id = [],
-	desc = [],
-	encoding = [],
-	octets = [],
-	lines = [],
-	md5 = [],
-	dsp = [],
-	lang = [],
-	loc = []
-	}).
-
--record(folder,{
-	name = [],
-	delim = ".",
-	flags = []
-	}).
+    name          = [],
+    flags         = [],
+    permflags     = [],
+    exists        = 0,
+    messages      = 0,
+    recent        = 0,
+    unseen        = 0,
+    uidvalidity   = 0,
+    uidnext       = 0,
+    myrights      = [],
+    readwrite     = false,
+    highestmodseq = 0
+    }).

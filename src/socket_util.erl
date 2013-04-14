@@ -57,9 +57,11 @@ read(#socket{fd = S,
               ssl -> ssl;
               _ -> tcp
           end,
+    io:format("waitting for data...~n", []), 
     receive
         {Tag, S, Bin} ->
             ?D(Bin),
+            io:format("recv: ~p~n", [size(Bin)]), 
             setopts(Socket, [{active,once}, binary]),
             binary_to_list(Bin);
         Err ->
