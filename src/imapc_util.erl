@@ -7,6 +7,8 @@
          gen_tag/0, quote_mbox/1, to_key/1]).
 -export([to_binary/1, to_int/1, to_list/1, to_float/1, to_atom/1]).
 
+-export([parse_fetch_result/2]).
+
 %%%------------------
 %%% Utility functions
 %%%------------------
@@ -95,6 +97,44 @@ to_atom(undefined)         -> undefined;
 to_atom(V) when is_atom(V) -> V;
 to_atom(V) when is_list(V) -> list_to_atom(V);
 to_atom(V)                 -> to_atom(to_list(V)).
+
+%% FIXME: We SHOULD NOT parse `FETCH` result using regex.
+parse_fetch_result("INTERNALDATE", Str) ->
+  case re:run(Str, "INTERNALDATE \"(?<DATE>.*?)\"", [{capture, ["DATE"], list}]) of
+    {match, [Date]} -> {ok, Date};
+    _ -> {error, not_found}
+  end;
+parse_fetch_result("RFC822.SIZE", Str) ->
+  ?LOG_DEBUG("parse_fetch_result.RFC822.SIZE: ~p~n", [Str]),
+  case re:run(Str, "RFC822.SIZE (?<SIZE>\\d+)", [{capture, ["SIZE"], list}]) of
+    {match, [Size]} -> {ok, ?l2i(Size)};
+    _ -> {error, not_found}
+  end;
+parse_fetch_result("RFC822", Str) ->
+  case re:run(Str, "\\(RFC822 {\\d+}(?<RAW>.*)\\)", [{capture, ["RAW"], list}, dotall]) of
+    {match, [Raw]} -> {ok, Raw};
+    _ -> {error, not_found}
+  end;
+parse_fetch_result("HAS_ATTACHEMENT", Str) ->
+  ?LOG_DEBUG("parse_fetch_result.HAS_ATTACHEMENT: ~p~n", [Str]),
+  case re:run(Str, "\\(\"attachment\" \\(\"FILENAME\" \"", []) of
+    {match, _} -> true;
+    _ -> false
+  end;
+parse_fetch_result("FLAGS", Str) ->
+  ?LOG_DEBUG("parse_fetch_result.FLAGS: ~p~n", [Str]),
+  case re:run(Str, "FLAGS \\((?<FLAGS>.*?)\\)\\)", [{capture, ["FLAGS"], list}]) of
+    {match, [Flags]} -> {ok, string:tokens(string:to_upper(Flags), " ")};
+    _ -> {error, not_found}
+  end;
+parse_fetch_result("ENVELOPE", Str) ->
+  ?LOG_DEBUG("parse_fetch_result.ENVELOPE: ~p~n", [Str]),
+  RE = "ENVELOPE \\(\"(?<DATE>.*?)\" \"(?<SUBJECT>.*?)\" \\(\\(\"?(?<EMAILNAME>.*?)\"? .*? \"(?<EMAILID>.*?)\" \"(?<EMAILHOST>.*?)\"\\)",
+  Fields = ["DATE","SUBJECT","EMAILNAME","EMAILID","EMAILHOST"],
+  case re:run(Str, RE, [{capture, Fields,list}]) of
+    {match, Value} -> {ok, lists:zip(Fields, Value)};
+    _ -> {error, not_found}
+  end.
 
 % def encode(s):
 %     if isinstance(s, str) and sum(n for n in (ord(c) for c in s) if n > 127):
