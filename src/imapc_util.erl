@@ -9,6 +9,8 @@
 
 -export([parse_fetch_result/2]).
 
+-export([mailbox_to_utf8/1, utf8_to_mailbox/1]).
+
 %%%------------------
 %%% Utility functions
 %%%------------------
@@ -136,68 +138,62 @@ parse_fetch_result("ENVELOPE", Str) ->
     _ -> {error, not_found}
   end.
 
-% def encode(s):
-%     if isinstance(s, str) and sum(n for n in (ord(c) for c in s) if n > 127):
-%         raise FolderNameError("%r contains characters not valid in a str folder name. "
-%                               "Convert to unicode first?" % s)
 
-%     r = []
-%     _in = []
-%     for c in s:
-%         if ord(c) in (range(0x20, 0x26) + range(0x27, 0x7f)):
-%             if _in:
-%                 r.extend(['&', modified_base64(''.join(_in)), '-'])
-%                 del _in[:]
-%             r.append(str(c))
-%         elif c == '&':
-%             if _in:
-%                 r.extend(['&', modified_base64(''.join(_in)), '-'])
-%                 del _in[:]
-%             r.append('&-')
-%         else:
-%             _in.append(c)
-%     if _in:
-%         r.extend(['&', modified_base64(''.join(_in)), '-'])
-%     return ''.join(r)
+%% @doc Decode mailbox name to utf8 data according to
+%%      rfc3501 Mailbox International Naming Convention.
+mailbox_to_utf8(Str) when is_list(Str) ->
+  mailbox_to_utf8(Str, [], []).
+mailbox_to_utf8([], [], Acc) ->
+  lists:flatten(lists:reverse(Acc));
+mailbox_to_utf8([], Utf7Acc, Acc) ->
+  mailbox_to_utf8([], [], [decode_rfc3501_mb(Utf7Acc) | Acc]);
+mailbox_to_utf8([$& | Rest], [], Acc) ->
+  mailbox_to_utf8(Rest, [$&], Acc);
+mailbox_to_utf8([$- | Rest], [], Acc) ->
+  mailbox_to_utf8(Rest, [], Acc);
+mailbox_to_utf8([$- | Rest], [_|[]], Acc) ->
+  mailbox_to_utf8(Rest, [], [$& | Acc]);
+mailbox_to_utf8([$- | Rest], Utf7Acc, Acc) ->
+  mailbox_to_utf8(Rest, [], [decode_rfc3501_mb(Utf7Acc) | Acc]);
+mailbox_to_utf8([C | Rest], [], Acc) ->
+  mailbox_to_utf8(Rest, [], [C | Acc]);
+mailbox_to_utf8([C | Rest], Utf7Acc, Acc) ->
+  mailbox_to_utf8(Rest, [C | Utf7Acc], Acc).
 
-
-% def decode(s):
-%     r = []
-%     decode = []
-%     for c in s:
-%         if c == '&' and not decode:
-%             decode.append('&')
-%         elif c == '-' and decode:
-%             if len(decode) == 1:
-%                 r.append('&')
-%             else:
-%                 r.append(modified_unbase64(''.join(decode[1:])))
-%             decode = []
-%         elif decode:
-%             decode.append(c)
-%         else:
-%             r.append(c)
-%     if decode:
-%         r.append(modified_unbase64(''.join(decode[1:])))
-%     out = ''.join(r)
-
-%     if not isinstance(out, unicode):
-%         out = unicode(out, 'latin-1')
-%     return out
+%% @doc Encode utf8 data to mailbox name according to
+%%      rfc3501 Mailbox International Naming Convention.
+utf8_to_mailbox(Str) when is_list(Str) ->
+  utf8_to_mailbox(Str, [], []).
+utf8_to_mailbox([], [], Acc) ->
+  lists:flatten(lists:reverse(Acc)); 
+utf8_to_mailbox([], Utf7Acc, Acc) ->
+  utf8_to_mailbox([], [], [encode_rfc3501mb(Utf7Acc) | Acc]);
+utf8_to_mailbox([C | Rest], Utf7Acc, Acc) when C >= 16#20, C < 16#26 ->
+  utf8_to_mailbox(Rest, [], [C, encode_rfc3501mb(Utf7Acc) | Acc]);
+utf8_to_mailbox([C | Rest], Utf7Acc, Acc) when C >= 16#27, C<16#7F ->
+  utf8_to_mailbox(Rest, [], [C, encode_rfc3501mb(Utf7Acc) | Acc]);
+utf8_to_mailbox([$& | Rest], Utf7Acc, Acc) ->
+  utf8_to_mailbox(Rest, [], [$-, $&, encode_rfc3501mb(Utf7Acc) | Acc]);
+utf8_to_mailbox([C | Rest], Utf7Acc, Acc) ->
+  utf8_to_mailbox(Rest, [C | Utf7Acc], Acc).
 
 
-% def modified_base64(s):
-%     s_utf7 = s.encode('utf-7')
-%     return s_utf7[1:-1].replace('/', ',')
-
-
-% def modified_unbase64(s):
-%     s_utf7 = '+' + s.replace(',', '/') + '-'
-%     return s_utf7.decode('utf-7')
 
 %%%-----------
 %%% internal
 %%%-----------
+encode_rfc3501mb([]) -> [];
+encode_rfc3501mb(S) ->
+  {ok, Cd} = iconv:open("UTF7", "UTF8"),
+  {ok, Bin} = iconv:conv(Cd, lists:reverse(S)),
+  [$&, re:replace(Bin, "/", ",", [{return, list}])] ++ [$-].
+
+decode_rfc3501_mb(S) ->
+  [_ | S2] = lists:reverse(S), 
+  S_utf7 = re:replace(S2, ",", "/", [{return, binary}]),
+  {ok, Cd} = iconv:open("UTF8", "UTF7"),
+  {ok, Bin} = iconv:conv(Cd, <<$+, S_utf7/binary, $->>),
+  [?b2l(Bin)].
 
 
 %%%-----------

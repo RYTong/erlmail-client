@@ -19,7 +19,11 @@
 %%%-----------------
 
 open_account(ConnType, Host, Port, User, Pass) ->
-  gen_server:start_link(?MODULE, {ConnType, Host, Port, User, Pass}, []).
+  TrapexitFlag = proplists:get_value(trap_exit,erlang:process_info(self())),
+  process_flag(trap_exit, true), 
+  Ret = gen_server:start_link(?MODULE, {ConnType, Host, Port, User, Pass}, []), 
+  process_flag(trap_exit, TrapexitFlag), 
+  Ret.
 
 close_account(Account) ->
   gen_server:call(Account, close_account).
