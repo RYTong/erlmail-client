@@ -125,7 +125,7 @@ parse_fetch_result("HAS_ATTACHEMENT", Str) ->
   end;
 parse_fetch_result("FLAGS", Str) ->
   ?LOG_DEBUG("parse_fetch_result.FLAGS: ~p~n", [Str]),
-  case re:run(Str, "FLAGS \\((?<FLAGS>.*?)\\)\\)", [{capture, ["FLAGS"], list}]) of
+  case re:run(Str, "FLAGS \\((?<FLAGS>.*?)\\)", [{capture, ["FLAGS"], list}]) of
     {match, [Flags]} -> {ok, string:tokens(string:to_upper(Flags), " ")};
     _ -> {error, not_found}
   end;

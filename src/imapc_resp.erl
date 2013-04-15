@@ -155,7 +155,6 @@ int_parse_response("STATUS", Line) ->
 int_parse_response(_Resp, Line) ->
   try
     Third = string:to_upper(lists:nth(3, string:tokens(Line, " \r\n"))),
-    io:format("third:===== ~p~n", [Third]), 
     case try_third_term(Third, Line) of
       {match, Response} ->
         {match, Response};
