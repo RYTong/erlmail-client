@@ -35,6 +35,7 @@
 %%%---------------------------------------------------------------------------------------
 -module(smtpc).
 -author('sjackson@simpleenigma.com').
+
 -include("client.hrl").
 
 -export([connect/1,help/1,noop/1,quit/1,rcpt/2,rset/1,vrfy/2]).

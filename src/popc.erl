@@ -26,7 +26,6 @@
 -module(popc).
 -author('cao.xu@rytong.com').
 
--include("mimemail.hrl").
 -export([connect/2,
          connect/3,
          login/3,

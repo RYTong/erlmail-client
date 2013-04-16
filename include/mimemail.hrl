@@ -1,5 +1,3 @@
-
-
 -record(mimemail, {type,
                    subtype,
                    headers,

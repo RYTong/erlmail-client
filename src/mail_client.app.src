@@ -1,0 +1,8 @@
+{application, mail_client,
+ [{description, "A mail client of Erlang to send and retrieve emails"},
+  {vsn, "0.0.1"},
+  {modules, []},
+  {registered, []},
+  {env, []},
+  {applications, []}]}.
+

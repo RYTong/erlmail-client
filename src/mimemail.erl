@@ -137,7 +137,18 @@ decode_headers(Headers, _, none) ->
 decode_headers([], Acc, _Charset) ->
 	lists:reverse(Acc);
 decode_headers([{Key, Value} | Headers], Acc, Charset) ->
+	%io:format(" **decode: ~p~n", [{Key, Value}]), 
 	decode_headers(Headers, [{Key, decode_header(Value, Charset)} | Acc], Charset).
+
+collect_all_encoded_words(Value, CurPos, Encoding, Type, Acc) ->
+	case re:run(Value, "=\\?"++Encoding++"\\?"++Type++"\\?([^\s]+)\\?=", [ungreedy]) of
+		{match,[{0, AllLen},{DataStart, DataLen}]} ->
+			Data = binstr:substr(Value, DataStart+1, DataLen),
+			RestValue = binstr:substr(Value, AllLen + 1),
+			collect_all_encoded_words(RestValue, (CurPos + AllLen), Encoding, Type, [Data | Acc]);
+		_ ->
+			{CurPos, Acc}
+	end.
 
 decode_header(Value, Charset) ->
 	case re:run(Value, "=\\?([-A-Za-z0-9_]+)\\?([qQbB])\\?([^\s]+)\\?=", [ungreedy]) of
@@ -145,25 +156,32 @@ decode_header(Value, Charset) ->
 			Value;
 		{match,[{AllStart, AllLen},{EncodingStart, EncodingLen},{TypeStart, _},{DataStart, DataLen}]} ->
 			Encoding = binstr:substr(Value, EncodingStart+1, EncodingLen),
-			Type = binstr:to_lower(binstr:substr(Value, TypeStart+1, 1)),
+			Type0 = binstr:substr(Value, TypeStart+1, 1),
+			EncodingStr = binary_to_list(Encoding),
+			TypeStr = binary_to_list(Type0),
+			Type = binstr:to_lower(Type0),
 			Data = binstr:substr(Value, DataStart+1, DataLen),
+			RestValue = binstr:substr(Value, AllStart + AllLen + 1),
+
+			{CurPos, DataList} = collect_all_encoded_words(RestValue, (AllStart + AllLen), EncodingStr, TypeStr, [Data]),
+			%%io:format(" ~p===DataList: ~p~n", [Encoding, DataList]), 
 
 			CD = case iconv:open(Charset, fix_encoding(Encoding)) of
 				{ok, Res} -> Res;
 				{error, einval} -> throw({bad_charset, fix_encoding(Encoding)})
 			end,
 
-			DecodedData = case Type of
-				<<"q">> ->
-					{ok, S} = iconv:conv(CD, decode_quoted_printable(re:replace(Data, "_", " ", [{return, binary}, global]))),
-					S;
-				<<"b">> ->
-					{ok, S} = iconv:conv(CD, decode_base64(re:replace(Data, "_", " ", [{return, binary}, global]))),
-					S
-			end,
-
+			DataBin = lists:foldl(
+				fun(X, Acc) ->
+					ReData = re:replace(X, "_", " ", [{return, binary}, global]),
+					DecodedData = case Type of
+						<<"q">> -> decode_quoted_printable(ReData);
+						<<"b">> -> decode_base64(ReData)
+					end,
+					<<DecodedData/binary, Acc/binary>>
+				end, <<>>, DataList),
+			{ok, DecodedData} = iconv:conv(CD, DataBin),
 			iconv:close(CD),
-
 
 			Offset = case re:run(binstr:substr(Value, AllStart + AllLen + 1), "^([\s\t\n\r]+)=\\?[-A-Za-z0-9_]+\\?[^\s]\\?[^\s]+\\?=", [ungreedy]) of
 				nomatch ->
@@ -173,8 +191,7 @@ decode_header(Value, Charset) ->
 					1+ WhiteSpaceLen
 			end,
 
-
-			NewValue = list_to_binary([binstr:substr(Value, 1, AllStart), DecodedData, binstr:substr(Value, AllStart + AllLen + Offset)]),
+			NewValue = list_to_binary([binstr:substr(Value, 1, AllStart), DecodedData, binstr:substr(Value, CurPos + Offset)]),
 			decode_header(NewValue, Charset)
 	end.
 
@@ -380,14 +397,14 @@ parse_headers(Body, Line, Headers) ->
 				true ->
 					F2 = fun(X) -> (X > 31 andalso X < 127) orelse X == 9 end,
 					FValue = binstr:strip(binstr:substr(Line, Index+1)),
-					FieldValue = case binstr:all(F2, FValue) of
+					FieldValue = case is_utf8_encoded(FValue) of
 						true ->
 							FValue;
-						_ ->
-							case is_utf8_encoded(FValue) of
+						false ->
+							case binstr:all(F2, FValue) of
 								true ->
 									FValue;
-								false ->
+								_ ->
 									% I couldn't figure out how to use a pure binary comprehension here :(
 									list_to_binary([ filter_non_ascii(C) || <<C:8>> <= FValue])
 							end
@@ -411,19 +428,33 @@ filter_non_ascii(_C) ->
 	<<"?">>.
 
 is_utf8_encoded(C) ->
-	try
-		{ok, CD} = iconv:open(<<"utf8">>, <<"utf8">>),
-		Result = 
-			case iconv:conv(CD, C) of
-				{ok, C} -> true;
-				_ -> false
-			end,
-		iconv:close(CD),
-		Result
-	catch
-		_:_ ->
-			false
-	end.
+	is_utf8_encoded(binary_to_list(C), true).
+
+is_utf8_encoded([], Flag) ->
+	Flag;
+is_utf8_encoded([C|Rest], Flag) when C <16#80 ->
+    is_utf8_encoded(Rest, Flag);
+is_utf8_encoded([C1,C2|Rest], Flag) when C1 =< 16#FF, C2 =< 16#FF, C1 band 16#E0 =:= 16#C0, C2 band 16#C0 =:= 16#80 ->
+    is_utf8_encoded(Rest, Flag);
+is_utf8_encoded([C1,_,_|Rest], Flag) when C1 =< 16#FF, C1 band 16#F0 =:= 16#E0 ->
+    is_utf8_encoded(Rest, Flag);
+is_utf8_encoded([C1,_,_,_|Rest], Flag) when C1 =< 16#FF, C1 band 16#F8 =:= 16#F0 ->
+    is_utf8_encoded(Rest, Flag);
+is_utf8_encoded(_Bad, _Flag) ->
+	false.
+	% try
+	% 	{ok, CD} = iconv:open(<<"utf8">>, <<"utf8">>),
+	% 	Result = 
+	% 		case iconv:conv(CD, C) of
+	% 			{ok, C} -> true;
+	% 			_ -> false
+	% 		end,
+	% 	iconv:close(CD),
+	% 	Result
+	% catch
+	% 	_:_ ->
+	% 		false
+	% end.
 
 decode_body(Type, Body, _InEncoding, none) ->
 	decode_body(Type, << <<X/integer>> || <<X>> <= Body, X < 128 >>);
