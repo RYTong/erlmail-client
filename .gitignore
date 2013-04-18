@@ -1,1 +1,11 @@
+*.swp
 *.beam
+erl_crash.dump
+src/imap_parser.erl
+src/imap_scan.erl
+coverage/*
+.DS_Store
+.eunit/
+deps/*
+ebin/*
+archaelus/*

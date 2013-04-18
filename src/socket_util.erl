@@ -53,14 +53,15 @@ write(#socket{fd = S,
 read(#socket{fd = S, 
              type = Type,
              timeout = T} = Socket) ->
-    ?D(Socket),
     Tag = case Type of 
               ssl -> ssl;
               _ -> tcp
           end,
+    io:format("waitting for data...~n", []), 
     receive
         {Tag, S, Bin} ->
             ?D(Bin),
+            io:format("recv: ~p~n", [size(Bin)]), 
             setopts(Socket, [{active,once}, binary]),
             binary_to_list(Bin);
         Err ->
@@ -97,4 +98,3 @@ do_get_options([{timeout, Timeout}|T], {Ssl, _}) ->
     do_get_options(T, {Ssl, Timeout});
 do_get_options([_H|T], Res) ->
     do_get_options(T, Res).
-

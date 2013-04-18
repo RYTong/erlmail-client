@@ -10,6 +10,7 @@
 %%
 
 -include("client.hrl").
+-include("imap.hrl").
 -include("mimemail.hrl").
 
 %%
@@ -29,6 +30,18 @@
          send/8,
          send/7
         ]).
+
+%% IMAP ONLY
+-export([imap_list_mailbox/1, imap_list_mailbox/2,
+         imap_select_mailbox/1, imap_select_mailbox/2, imap_select_mailbox/3,
+         imap_save_draft/2]).
+-export([imap_list_message/3,
+         imap_retrieve_message/2, imap_retrieve_message/3,
+         imap_seen_message/2,
+         imap_trash_message/2,
+         imap_move_message/3,
+         imap_clear_mailbox/1
+         ]).
 
 
 %%
@@ -157,10 +170,91 @@ send(Fsm, From, To, Cc, Bcc, Subject, Body, Attatchments) ->
     ok.
 
 
-    
+%% List mailboxes with simple desc.
+imap_list_mailbox(Pid) ->
+    imap_list_mailbox(Pid, "\"\"").
+imap_list_mailbox(Pid, RefName) when is_list(RefName)->
+    {ok, Mailboxes} = imapc:list(Pid, RefName, "%"),
+    lists:foldl(
+        fun({Mailbox, Attrs}, Acc) ->
+            {ok, Value} = imapc:status(Pid, Mailbox, "(unseen messages)"),
+            [{Mailbox, [{attributes, Attrs}|Value]} | Acc]
+        end, [], Mailboxes). 
 
+%% select mailbox and list messages.
+imap_select_mailbox(Pid) ->
+    imap_select_mailbox(Pid, "INBOX").
+imap_select_mailbox(Pid, Mailbox) when is_list(Mailbox) -> 
+    imap_select_mailbox(Pid, Mailbox, 5).
+imap_select_mailbox(Pid, Mailbox, Num) when is_list(Mailbox), is_integer(Num), Num > 0 ->
+    {ok, SelectedMailbox} = imapc:select(Pid, Mailbox), 
+    MsgSize = SelectedMailbox#mailbox.exists,
+    FromSeq =
+        if
+            MsgSize =< Num -> 1;
+            true -> (MsgSize - Num -1) 
+        end,
+    {ok, MessageList} = imap_list_message(Pid, FromSeq, MsgSize),
+    {ok, {SelectedMailbox, MessageList}}.
 
+%% list messages with simple desc.
+imap_list_message(Pid, FromSeq, ToSeq) when is_integer(FromSeq), is_integer(ToSeq), FromSeq =< ToSeq->
+    SeqSet = lists:concat([FromSeq, ":", ToSeq]),
+    DataItems = "(flags envelope bodystructure rfc822.size)",
+    {ok, MessageList} = imapc:fetch(Pid, SeqSet, DataItems),
+    MessageList2 = lists:map(
+        fun({Seq, Content}) ->
+            {ok, Envelope} = imapc_util:parse_fetch_result("ENVELOPE", Content),
+            HasAttachment = imapc_util:parse_fetch_result("HAS_ATTACHEMENT", Content),
+            {ok, Size} = imapc_util:parse_fetch_result("RFC822.SIZE", Content),
+            {ok, Flags} = imapc_util:parse_fetch_result("FLAGS", Content),
+            {Seq, [{"HAS_ATTACHEMENT", HasAttachment}, {"SIZE", Size}, {"FLAGS", Flags} | Envelope]}
+        end, MessageList), 
+    {ok, MessageList2}.
 
+%% retrieve message.
+imap_retrieve_message(Pid, MsgSeq) when is_integer(MsgSeq)->
+    imap_retrieve_message(Pid, MsgSeq, MsgSeq).
+imap_retrieve_message(Pid, FromSeq, ToSeq) when is_integer(FromSeq), is_integer(ToSeq)->
+    SeqSet = lists:concat([FromSeq, ":", ToSeq]),
+    {ok, RawMessageList} = imapc:fetch(Pid, SeqSet, "(rfc822)"),
+    ParsedMessageList = lists:map(
+        fun({Seq, Content}) ->
+            {ok, Raw} = imapc_util:parse_fetch_result("RFC822", Content),
+            {Seq, retrieve_util:raw_message_to_mail(Raw)}
+        end, RawMessageList), 
+    {ok, ParsedMessageList}.
+
+%% RFC2822Msg SHOULD be in the format of an [RFC-2822] message.
+imap_save_draft(Pid, RFC2822Msg) when is_list(RFC2822Msg) ->
+    imapc:append(Pid, "\\Drafts", "()", RFC2822Msg).
+
+%% Set the \Seen flag.
+imap_seen_message(Pid, MsgSeq) when is_integer(MsgSeq)->
+    SeqSet = lists:concat([MsgSeq, ":", MsgSeq]),
+    imap_seen_message(Pid, SeqSet);
+imap_seen_message(Pid, SeqSet) when is_list(SeqSet) ->
+    imapc:store(Pid, SeqSet, "+FLAGS", "(\\Seen)").
+
+%% Move Mails to Trash.
+imap_trash_message(Pid, MsgSeq) when is_integer(MsgSeq)->
+    SeqSet = lists:concat([MsgSeq, ":", MsgSeq]),
+    imap_trash_message(Pid, SeqSet);
+imap_trash_message(Pid, SeqSet) when is_list(SeqSet) ->
+    imapc:store(Pid, SeqSet, "+FLAGS", "(\\Deleted)").
+
+%% Move Mails to Other Mailbox.
+imap_move_message(Pid, MsgSeq, Mailbox) when is_integer(MsgSeq), is_list(Mailbox)->
+    SeqSet = lists:concat([MsgSeq, ":", MsgSeq]),
+    imap_move_message(Pid, SeqSet, Mailbox);
+imap_move_message(Pid, SeqSet, Mailbox) when is_list(SeqSet), is_list(Mailbox) ->
+    imapc:copy(Pid, SeqSet, Mailbox),
+    imap_trash_message(Pid, SeqSet),
+    imap_clear_mailbox(Pid).
+
+%% Delete Mails that marked \Deleted.
+imap_clear_mailbox(Pid) ->
+    imapc:expunge(Pid).
 
 %%
 %% Local Functions
