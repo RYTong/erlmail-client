@@ -5,13 +5,11 @@
 -behaviour(gen_fsm).
 
 %% api
--export([connect/2, connect_ssl/2, login/3, logout/1, noop/1, disconnect/1,
-         list/3, status/3,
-         select/2, examine/2, append/4, expunge/1,
-         search/2, fetch/3, store/4, copy/3
-        ]).
-
--export([fsm_state/1]).
+% -export([connect/2, connect_ssl/2, login/3, logout/1, noop/1, disconnect/1,
+%          list/3, status/3,
+%          select/2, examine/2, append/4, expunge/1,
+%          search/2, fetch/3, store/4, copy/3
+%         ]).
 
 %% callbacks
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3,
@@ -38,56 +36,56 @@
 %%% Client functions
 %%%-----------------
 
-connect(Host, Port) ->
-  gen_fsm:start_link(?MODULE, {tcp, Host, Port}, []).
+% connect(Host, Port) ->
+%   gen_fsm:start_link(?MODULE, {tcp, Host, Port}, []).
 
-connect_ssl(Host, Port) ->
-  gen_fsm:start_link(?MODULE, {ssl, Host, Port}, []).
+% connect_ssl(Host, Port) ->
+%   gen_fsm:start_link(?MODULE, {ssl, Host, Port}, []).
 
-login(Conn, User, Pass) ->
-  gen_fsm:sync_send_event(Conn, {command, login, {User, Pass}}).
+% login(Conn, User, Pass) ->
+%   gen_fsm:sync_send_event(Conn, {command, login, {User, Pass}}).
 
-logout(Conn) ->
-  gen_fsm:sync_send_event(Conn, {command, logout, {}}).
+% logout(Conn) ->
+%   gen_fsm:sync_send_event(Conn, {command, logout, {}}).
 
-noop(Conn) ->
-  gen_fsm:sync_send_event(Conn, {command, noop, {}}).
+% noop(Conn) ->
+%   gen_fsm:sync_send_event(Conn, {command, noop, {}}).
 
-disconnect(Conn) ->
-  gen_fsm:sync_send_all_state_event(Conn, {command, disconnect, {}}).
+% disconnect(Conn) ->
+%   gen_fsm:sync_send_all_state_event(Conn, {command, disconnect, {}}).
 
-list(Conn, RefName, Mailbox) ->
-  gen_fsm:sync_send_event(Conn, {command, list, [RefName, imapc_util:quote_mbox(Mailbox)]}).
+% list(Conn, RefName, Mailbox) ->
+%   gen_fsm:sync_send_event(Conn, {command, list, [RefName, imapc_util:quote_mbox(Mailbox)]}).
 
-status(Conn, Mailbox, StatusDataItems) ->
-  gen_fsm:sync_send_event(Conn, {command, status, [imapc_util:quote_mbox(Mailbox), StatusDataItems]}).
+% status(Conn, Mailbox, StatusDataItems) ->
+%   gen_fsm:sync_send_event(Conn, {command, status, [imapc_util:quote_mbox(Mailbox), StatusDataItems]}).
 
-select(Conn, Mailbox) ->
-  gen_fsm:sync_send_event(Conn, {command, select, imapc_util:quote_mbox(Mailbox)}).
+% select(Conn, Mailbox) ->
+%   gen_fsm:sync_send_event(Conn, {command, select, imapc_util:quote_mbox(Mailbox)}).
 
-examine(Conn, Mailbox) ->
-  gen_fsm:sync_send_event(Conn, {command, examine, Mailbox}).
+% examine(Conn, Mailbox) ->
+%   gen_fsm:sync_send_event(Conn, {command, examine, Mailbox}).
 
-append(Conn, Mailbox, Flags, Message) ->
-  gen_fsm:sync_send_event(Conn, {command, append, [Mailbox, Flags, Message]}).
+% append(Conn, Mailbox, Flags, Message) ->
+%   gen_fsm:sync_send_event(Conn, {command, append, [Mailbox, Flags, Message]}).
 
-expunge(Conn) ->
-  gen_fsm:sync_send_event(Conn, {command, expunge, []}).
+% expunge(Conn) ->
+%   gen_fsm:sync_send_event(Conn, {command, expunge, []}).
 
-search(Conn, SearchKeys) ->
-  gen_fsm:sync_send_event(Conn, {command, search, SearchKeys}).
+% search(Conn, SearchKeys) ->
+%   gen_fsm:sync_send_event(Conn, {command, search, SearchKeys}).
 
-fetch(Conn, SequenceSet, MsgDataItems) ->
-  gen_fsm:sync_send_event(Conn, {command, fetch, [SequenceSet, MsgDataItems]}, infinity).
+% fetch(Conn, SequenceSet, MsgDataItems) ->
+%   gen_fsm:sync_send_event(Conn, {command, fetch, [SequenceSet, MsgDataItems]}, infinity).
 
-copy(Conn, SequenceSet, Mailbox) ->
-  gen_fsm:sync_send_event(Conn, {command, copy, [SequenceSet, Mailbox]}).
+% copy(Conn, SequenceSet, Mailbox) ->
+%   gen_fsm:sync_send_event(Conn, {command, copy, [SequenceSet, Mailbox]}).
 
-store(Conn, SequenceSet, Flags, Action) ->
-  gen_fsm:sync_send_event(Conn, {command, store, [SequenceSet, Flags, Action]}).
+% store(Conn, SequenceSet, Flags, Action) ->
+%   gen_fsm:sync_send_event(Conn, {command, store, [SequenceSet, Flags, Action]}).
 
-fsm_state(Conn) ->
-  gen_fsm:sync_send_all_state_event(Conn, fsm_state).
+% fsm_state(Conn) ->
+%   gen_fsm:sync_send_all_state_event(Conn, fsm_state).
 
 %%%-------------------
 %%% Callback functions
@@ -239,13 +237,3 @@ handle_command(Command, From, StateName, StateData) ->
     {error, Reason} ->
       {stop, Reason, StateData}
   end.
-
-
-%%
-%% Tests
-%%
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
-  
--endif.
