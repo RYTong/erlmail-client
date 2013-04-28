@@ -319,15 +319,19 @@ parse_multi_line(Data, S) ->
 
 %% STATE - 0 begin of the line
 %%       - 1 rest of the line
-
+%%       - 2 begin with $.
 
 
 do_parse(0, [$., 13, 10|_], Res, _S) ->
     {ok, lists:reverse(Res)};
 
 do_parse(0, [$.|T], Res, S) ->
-    do_parse(1, T, Res, S);
+    do_parse(2, T, Res, S);
 
+%% the clause for the situation that $. 
+%% and CRLF are sent separately 
+do_parse(2, [13, 10|_T], Res,  _S) ->
+    {ok, lists:reverse(Res)};
 
 do_parse(_, [13, 10|T], Res, S) ->
     do_parse(0, T, [10, 13|Res], S);
