@@ -27,6 +27,7 @@
 -define(SEARCH_REGEXP, "^(?<TAG>[\\*[:alnum:]]+) (?i)(?<KEYWORD>SEARCH)( (?<SEARCH>.*))?(?-i)$").
 -define(LIST_REGEXP, "^(?<TAG>[\\*[:alnum:]]+) (?i)(?<KEYWORD>LIST) (?<ATTRS>.*)(?<=\\)) (?<DELIMITER>.*?) \"(?<NAME>.*)\".*(?-i)$").
 -define(STATUS_REGEXP, "^(?<TAG>[\\*[:alnum:]]+) (?i)(?<KEYWORD>STATUS) \"(?<MAILBOX>.*)\" (?<ITEMS>.*)?(?-i)$").
+-define(STATUS_REGEXP2, "^(?<TAG>[\\*[:alnum:]]+) (?i)(?<KEYWORD>STATUS) (?<MAILBOX>\\S*) (?<ITEMS>.*)?(?-i)$").
 -define(FETCH_REGEXP, "^(?<TAG>[\\*[:alnum:]]+) (?<ID>.*) (?i)(?<KEYWORD>FETCH)(?-i)(?: (?<REST>.*))??$").
 
 %%%-------------------
@@ -34,46 +35,46 @@
 %%%-------------------
 
 match_capability_response(Str) ->
-  match_response(Str, ?CAPABILITY_REGEXP, ["TAG", "KEYWORD", "CAPABILITY"],
+  match_response(Str, [?CAPABILITY_REGEXP], ["TAG", "KEYWORD", "CAPABILITY"],
                 fun tokenize/1).
 
 match_ok_response(Str) ->
-  match_response(Str, ?OK_REGEXP, ["TAG", "KEYWORD", "BRACKETED", "REST"],
+  match_response(Str, [?OK_REGEXP], ["TAG", "KEYWORD", "BRACKETED", "REST"],
                  fun tokenize_ok/1).
 
 match_no_response(Str) ->
-  match_response(Str, ?NO_REGEXP, ["TAG", "KEYWORD", "REASON"]).
+  match_response(Str, [?NO_REGEXP], ["TAG", "KEYWORD", "REASON"]).
 
 match_bad_response(Str) ->
-  match_response(Str, ?BAD_REGEXP, ["TAG", "KEYWORD", "REASON"]).
+  match_response(Str, [?BAD_REGEXP], ["TAG", "KEYWORD", "REASON"]).
 
 match_bye_response(Str) ->
   TransformFun = fun(Response) -> erlang:append_element(Response, "") end,
-  match_response(Str, ?BYE_REGEXP, ["TAG", "KEYWORD"], TransformFun).
+  match_response(Str, [?BYE_REGEXP], ["TAG", "KEYWORD"], TransformFun).
 
 match_flags_response(Str) ->
-  match_response(Str, ?FLAGS_REGEXP, ["TAG", "KEYWORD", "FLAG"]).
+  match_response(Str, [?FLAGS_REGEXP], ["TAG", "KEYWORD", "FLAG"]).
 
 match_exists_response(Str) ->
-  match_response(Str, ?EXISTS_REGEXP, ["TAG", "KEYWORD", "EXISTS"]).
+  match_response(Str, [?EXISTS_REGEXP], ["TAG", "KEYWORD", "EXISTS"]).
 
 match_recent_response(Str) ->
-  match_response(Str, ?RECENT_REGEXP, ["TAG", "KEYWORD", "RECENT"]).
+  match_response(Str, [?RECENT_REGEXP], ["TAG", "KEYWORD", "RECENT"]).
 
 match_search_response(Str) ->
-  match_response(Str, ?SEARCH_REGEXP, ["TAG", "KEYWORD", "SEARCH"],
+  match_response(Str, [?SEARCH_REGEXP], ["TAG", "KEYWORD", "SEARCH"],
                  fun tokenize/1).
 
 match_fetch_response(Str) ->
-  match_response(Str, ?FETCH_REGEXP, ["TAG", "KEYWORD", "ID", "REST"],
+  match_response(Str, [?FETCH_REGEXP], ["TAG", "KEYWORD", "ID", "REST"],
                  fun transform_fetch/1).
 
 match_list_response(Str) ->
-  match_response(Str, ?LIST_REGEXP, ["TAG", "KEYWORD", "ATTRS", "DELIMITER", "NAME"],
+  match_response(Str, [?LIST_REGEXP], ["TAG", "KEYWORD", "ATTRS", "DELIMITER", "NAME"],
                  fun transform_list/1).
 
 match_status_response(Str) ->
-  match_response(Str, ?STATUS_REGEXP, ["TAG", "KEYWORD", "MAILBOX", "ITEMS"],
+  match_response(Str, [?STATUS_REGEXP, ?STATUS_REGEXP2], ["TAG", "KEYWORD", "MAILBOX", "ITEMS"],
                  fun transform_status/1).
 
 %%%-----------
@@ -83,11 +84,14 @@ match_status_response(Str) ->
 match_response(Str, Regexp, Fields) ->
   match_response(Str, Regexp, Fields, fun imapc_util:identity_fun/1).
 
-match_response(Str, Regexp, Fields, TransformFun) ->
+match_response(Str, [Regexp|Rest], Fields, TransformFun) ->
   io:format("======:~p~n", [{Str, trim_lineterms(Str), Regexp, Fields}]), 
   case re:run(trim_lineterms(Str), Regexp, [{capture, Fields, list}]) of
     nomatch ->
-      nomatch;
+      case Rest of
+        [] -> nomatch;
+        _ -> match_response(Str, Rest, Fields, TransformFun)
+      end;
     {match, Matches} ->
       Response = list_to_tuple([response] ++ Matches),
       Keyword = string:to_upper(element(3, Response)),

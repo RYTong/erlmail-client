@@ -25,7 +25,7 @@ login(Fsm, User, Pass) ->
   gen_fsm:sync_send_event(Fsm, {command, login, {User, Pass}}).
 
 list(Fsm, RefName, Mailbox) ->
-  gen_fsm:sync_send_event(Fsm, {command, list, [RefName, imapc_util:quote_mbox(Mailbox)]}).
+  gen_fsm:sync_send_event(Fsm, {command, list, [imapc_util:quote_mbox(RefName), imapc_util:quote_mbox(Mailbox)]}).
 
 %% @link http://tools.ietf.org/html/rfc3501#section-6.3.10
 %% The currently defined status data items that can be requested are:
@@ -42,11 +42,11 @@ select(Fsm, Mailbox) ->
   {ok, M#mailbox{name = Mailbox}}.
 
 examine(Fsm, Mailbox) ->
-  gen_fsm:sync_send_event(Fsm, {command, examine, Mailbox}).
+  gen_fsm:sync_send_event(Fsm, {command, examine, imapc_util:quote_mbox(Mailbox)}).
 
 %% "From: Fred Foobar <foobar@Blurdybloop.COM>\r\nSubject: afternoon meeting\r\n\r\nddd\r\n"
 append(Fsm, Mailbox, Flags, Message) ->
-  gen_fsm:sync_send_event(Fsm, {command, append, [Mailbox, Flags, Message]}).
+  gen_fsm:sync_send_event(Fsm, {command, append, [imapc_util:quote_mbox(Mailbox), Flags, Message]}).
 
 expunge(Fsm) ->
   gen_fsm:sync_send_event(Fsm, {command, expunge, []}).
@@ -58,7 +58,7 @@ fetch(Fsm, SequenceSet, MsgDataItems) ->
   gen_fsm:sync_send_event(Fsm, {command, fetch, [SequenceSet, MsgDataItems]}, infinity).
 
 copy(Fsm, SequenceSet, Mailbox) ->
-  gen_fsm:sync_send_event(Fsm, {command, copy, [SequenceSet, Mailbox]}).
+  gen_fsm:sync_send_event(Fsm, {command, copy, [SequenceSet, imapc_util:quote_mbox(Mailbox)]}).
 
 store(Fsm, SequenceSet, Flags, Action) ->
   gen_fsm:sync_send_event(Fsm, {command, store, [SequenceSet, Flags, Action]}).

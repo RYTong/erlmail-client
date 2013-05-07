@@ -227,6 +227,7 @@ handle_response(Response = {response, Tag, _, _}, StateName, StateData) ->
   {next_state, NextStateName, NewStateData#state_data{untagged_responses_received = []}}.
 
 handle_command(Command, From, StateName, StateData) ->
+  ?LOG_DEBUG("handle command: ~p~n", [Command]),
   case imapc_cmd:send_command(StateData#state_data.socket_type,
                              StateData#state_data.socket, Command) of
     {ok, Tag} ->

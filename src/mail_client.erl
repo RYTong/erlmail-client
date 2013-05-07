@@ -299,7 +299,7 @@ handle_call(pop_capabilities, _From, State = #state{fsm=Fsm, handler=Handler}) -
         end,
     {reply, Reply, State};
 handle_call({imap_list_mailbox, RefName}, _From, State = #state{fsm=Fsm, handler=Handler}) ->
-    {ok, Mailboxes} = Handler:list(Fsm, imapc_util:utf8_to_mailbox(RefName), "%"),
+    {ok, Mailboxes} = Handler:list(Fsm, RefName, "%"),
     Reply = {ok, lists:foldl(
         fun({Mailbox, Attrs}, Acc) ->
             {ok, [{Name, Value}]} = Handler:status(Fsm, Mailbox, "(unseen messages)"),

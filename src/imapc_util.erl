@@ -9,7 +9,9 @@
 
 -export([parse_fetch_result/2]).
 
--export([mailbox_to_utf8/1, utf8_to_mailbox/1]).
+-export([mailbox_to_utf8/1]).
+
+-compile([nowarn_unused_function]).
 
 %%%------------------
 %%% Utility functions
@@ -62,6 +64,11 @@ gen_tag() ->
   string:right(integer_to_list(Tag), 3, $0).
 
 quote_mbox(Orig) ->
+  quote_mbox_if_need(Orig).
+
+quote_mbox_if_need([$"| Rest]) ->
+  [$" | Rest];
+quote_mbox_if_need(Orig) ->
   lists:flatten([34,Orig,34]).
 
 to_key(L) when is_list(L) ->
@@ -139,14 +146,13 @@ parse_fetch_result("ENVELOPE", Str) ->
   end.
 
 
-%% @doc Decode mailbox name to utf8 data according to
-%%      rfc3501 Mailbox International Naming Convention.
+%% @doc Decode and Encode rfc3501 Mailbox.
 mailbox_to_utf8(Str) when is_list(Str) ->
   mailbox_to_utf8(Str, [], []).
 mailbox_to_utf8([], [], Acc) ->
   lists:flatten(lists:reverse(Acc));
 mailbox_to_utf8([], Utf7Acc, Acc) ->
-  mailbox_to_utf8([], [], [decode_rfc3501_mb(Utf7Acc) | Acc]);
+  mailbox_to_utf8([], [], [decode_rfc3501_mailbox(Utf7Acc) | Acc]);
 mailbox_to_utf8([$& | Rest], [], Acc) ->
   mailbox_to_utf8(Rest, [$&], Acc);
 mailbox_to_utf8([$- | Rest], [], Acc) ->
@@ -154,26 +160,24 @@ mailbox_to_utf8([$- | Rest], [], Acc) ->
 mailbox_to_utf8([$- | Rest], [_|[]], Acc) ->
   mailbox_to_utf8(Rest, [], [$& | Acc]);
 mailbox_to_utf8([$- | Rest], Utf7Acc, Acc) ->
-  mailbox_to_utf8(Rest, [], [decode_rfc3501_mb(Utf7Acc) | Acc]);
+  mailbox_to_utf8(Rest, [], [decode_rfc3501_mailbox(Utf7Acc) | Acc]);
 mailbox_to_utf8([C | Rest], [], Acc) ->
   mailbox_to_utf8(Rest, [], [C | Acc]);
 mailbox_to_utf8([C | Rest], Utf7Acc, Acc) ->
   mailbox_to_utf8(Rest, [C | Utf7Acc], Acc).
 
-%% @doc Encode utf8 data to mailbox name according to
-%%      rfc3501 Mailbox International Naming Convention.
 utf8_to_mailbox(Str) when is_list(Str) ->
   utf8_to_mailbox(Str, [], []).
 utf8_to_mailbox([], [], Acc) ->
   lists:flatten(lists:reverse(Acc)); 
 utf8_to_mailbox([], Utf7Acc, Acc) ->
-  utf8_to_mailbox([], [], [encode_rfc3501mb(Utf7Acc) | Acc]);
+  utf8_to_mailbox([], [], [encode_rfc3501_mailbox(Utf7Acc) | Acc]);
 utf8_to_mailbox([C | Rest], Utf7Acc, Acc) when C >= 16#20, C < 16#26 ->
-  utf8_to_mailbox(Rest, [], [C, encode_rfc3501mb(Utf7Acc) | Acc]);
+  utf8_to_mailbox(Rest, [], [C, encode_rfc3501_mailbox(Utf7Acc) | Acc]);
 utf8_to_mailbox([C | Rest], Utf7Acc, Acc) when C >= 16#27, C<16#7F ->
-  utf8_to_mailbox(Rest, [], [C, encode_rfc3501mb(Utf7Acc) | Acc]);
+  utf8_to_mailbox(Rest, [], [C, encode_rfc3501_mailbox(Utf7Acc) | Acc]);
 utf8_to_mailbox([$& | Rest], Utf7Acc, Acc) ->
-  utf8_to_mailbox(Rest, [], [$-, $&, encode_rfc3501mb(Utf7Acc) | Acc]);
+  utf8_to_mailbox(Rest, [], [$-, $&, encode_rfc3501_mailbox(Utf7Acc) | Acc]);
 utf8_to_mailbox([C | Rest], Utf7Acc, Acc) ->
   utf8_to_mailbox(Rest, [C | Utf7Acc], Acc).
 
@@ -182,17 +186,20 @@ utf8_to_mailbox([C | Rest], Utf7Acc, Acc) ->
 %%%-----------
 %%% internal
 %%%-----------
-encode_rfc3501mb([]) -> [];
-encode_rfc3501mb(S) ->
+%% XXX:Seems there is a bug in converting to utf7 from utf8 using erlang-iconv.
+encode_rfc3501_mailbox([]) -> [];
+encode_rfc3501_mailbox(S) ->
   {ok, Cd} = iconv:open("UTF7", "UTF8"),
   {ok, Bin} = iconv:conv(Cd, lists:reverse(S)),
-  [$&, re:replace(Bin, "/", ",", [{return, list}])] ++ [$-].
+  iconv:close(Cd), 
+  [$&, tl(re:replace(Bin, "/", ",", [{return, list}]))] ++ [$-].
 
-decode_rfc3501_mb(S) ->
+decode_rfc3501_mailbox(S) ->
   [_ | S2] = lists:reverse(S), 
   S_utf7 = re:replace(S2, ",", "/", [{return, binary}]),
   {ok, Cd} = iconv:open("UTF8", "UTF7"),
   {ok, Bin} = iconv:conv(Cd, <<$+, S_utf7/binary, $->>),
+  iconv:close(Cd), 
   [?b2l(Bin)].
 
 
