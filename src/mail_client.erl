@@ -307,7 +307,7 @@ handle_call({imap_list_mailbox, RefName}, _From, State = #state{fsm=Fsm, handler
         end, [], Mailboxes)}, 
     {reply, Reply, State};
 handle_call({imap_select_mailbox, Mailbox, Num}, _From, State = #state{fsm=Fsm, handler=Handler}) ->
-    {ok, SelectedMailbox} = Handler:select(Fsm, imapc_util:utf8_to_mailbox(Mailbox)), 
+    {ok, SelectedMailbox} = Handler:select(Fsm, Mailbox), 
     MsgSize = SelectedMailbox#mailbox.exists,
     FromSeq =
         if
@@ -337,7 +337,7 @@ handle_call({imap_trash_message, SeqSet}, _From, State = #state{fsm=Fsm}) ->
     Reply = do_imap_trash_message(Fsm, SeqSet),
     {reply, Reply, State};
 handle_call({imap_move_message, SeqSet, Mailbox}, _From, State = #state{fsm=Fsm, handler=Handler}) ->
-    Handler:copy(Fsm, SeqSet, imapc_util:utf8_to_mailbox(Mailbox)),
+    Handler:copy(Fsm, SeqSet, Mailbox),
     do_imap_trash_message(Fsm, SeqSet),
     Reply = do_imap_clear_mailbox(Fsm),
     {reply, Reply, State};
