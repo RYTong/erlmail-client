@@ -312,7 +312,7 @@ handle_call({imap_select_mailbox, Mailbox, Num}, _From, State = #state{fsm=Fsm, 
     FromSeq =
         if
             MsgSize =< Num -> 1;
-            true -> (MsgSize - Num -1) 
+            true -> (MsgSize - Num + 1)
         end,
     {ok, MessageList} = do_imap_list_message(Fsm, FromSeq, MsgSize),
     {reply, {ok, {SelectedMailbox, MessageList}}, State};
