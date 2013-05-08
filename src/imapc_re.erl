@@ -26,6 +26,7 @@
 -define(RECENT_REGEXP, "^(?<TAG>[\\*[:alnum:]]+) (?<RECENT>.*) (?i)(?<KEYWORD>RECENT)(?-i)$").
 -define(SEARCH_REGEXP, "^(?<TAG>[\\*[:alnum:]]+) (?i)(?<KEYWORD>SEARCH)( (?<SEARCH>.*))?(?-i)$").
 -define(LIST_REGEXP, "^(?<TAG>[\\*[:alnum:]]+) (?i)(?<KEYWORD>LIST) (?<ATTRS>.*)(?<=\\)) (?<DELIMITER>.*?) \"(?<NAME>.*)\".*(?-i)$").
+-define(LIST_REGEXP2, "^(?<TAG>[\\*[:alnum:]]+) (?i)(?<KEYWORD>LIST) (?<ATTRS>.*)(?<=\\)) (?<DELIMITER>.*?) (?<NAME>\\S*).*(?-i)$").
 -define(STATUS_REGEXP, "^(?<TAG>[\\*[:alnum:]]+) (?i)(?<KEYWORD>STATUS) \"(?<MAILBOX>.*)\" (?<ITEMS>.*)?(?-i)$").
 -define(STATUS_REGEXP2, "^(?<TAG>[\\*[:alnum:]]+) (?i)(?<KEYWORD>STATUS) (?<MAILBOX>\\S*) (?<ITEMS>.*)?(?-i)$").
 -define(FETCH_REGEXP, "^(?<TAG>[\\*[:alnum:]]+) (?<ID>.*) (?i)(?<KEYWORD>FETCH)(?-i)(?: (?<REST>.*))??$").
@@ -70,7 +71,7 @@ match_fetch_response(Str) ->
                  fun transform_fetch/1).
 
 match_list_response(Str) ->
-  match_response(Str, [?LIST_REGEXP], ["TAG", "KEYWORD", "ATTRS", "DELIMITER", "NAME"],
+  match_response(Str, [?LIST_REGEXP, ?LIST_REGEXP2], ["TAG", "KEYWORD", "ATTRS", "DELIMITER", "NAME"],
                  fun transform_list/1).
 
 match_status_response(Str) ->
@@ -85,14 +86,16 @@ match_response(Str, Regexp, Fields) ->
   match_response(Str, Regexp, Fields, fun imapc_util:identity_fun/1).
 
 match_response(Str, [Regexp|Rest], Fields, TransformFun) ->
-  io:format("======:~p~n", [{Str, trim_lineterms(Str), Regexp, Fields}]), 
   case re:run(trim_lineterms(Str), Regexp, [{capture, Fields, list}]) of
     nomatch ->
       case Rest of
-        [] -> nomatch;
+        [] ->
+          ?LOG_DEBUG("nomatch======:~p~n", [{Str, trim_lineterms(Str), Regexp, Fields}]), 
+          nomatch;
         _ -> match_response(Str, Rest, Fields, TransformFun)
       end;
     {match, Matches} ->
+      ?LOG_DEBUG("match======:~p~n", [{trim_lineterms(Str), Regexp}]), 
       Response = list_to_tuple([response] ++ Matches),
       Keyword = string:to_upper(element(3, Response)),
       Response2 = setelement(3, Response, Keyword),

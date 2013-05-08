@@ -16,7 +16,7 @@ parse_response(Line) ->
             {ok, {response, untagged, Line, []}};
         _ ->
             Resp = string:to_upper(lists:nth(2, string:tokens(Line, " "))),
-            io:format("resp====:~p~n", [Resp]), 
+            ?LOG_DEBUG("resp====:~p~n", [Resp]), 
             case int_parse_response(Resp, Line) of
                 {match, Response} -> {ok, parse_tag(Response)};
                 nomatch -> {ok, {response, untagged, Line, []}}
