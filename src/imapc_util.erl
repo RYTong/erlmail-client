@@ -1,17 +1,18 @@
 -module(imapc_util).
 
 -include("imap.hrl").
+-include("client.hrl").
 
 -export([identity_fun/1, catch_first_error/1, extract_dict_element/2,
          clean_line/1, start_ssl/0, sock_connect/4, sock_send/3, sock_close/2,
          gen_tag/0, quote_mbox/1, to_key/1]).
 -export([to_binary/1, to_int/1, to_list/1, to_float/1, to_atom/1]).
 
--export([parse_fetch_result/2]).
+-export([parse_fetch_result/1]).
 
 -export([mailbox_to_utf8/1]).
 
--compile([nowarn_unused_function]).
+-compile([nowarn_unused_function, export_all]).
 
 %%%------------------
 %%% Utility functions
@@ -108,42 +109,98 @@ to_atom(V) when is_list(V) -> list_to_atom(V);
 to_atom(V)                 -> to_atom(to_list(V)).
 
 %% FIXME: We SHOULD NOT parse `FETCH` result using regex.
-parse_fetch_result("INTERNALDATE", Str) ->
-  case re:run(Str, "INTERNALDATE \"(?<DATE>.*?)\"", [{capture, ["DATE"], list}]) of
-    {match, [Date]} -> {ok, Date};
-    _ -> {error, not_found}
-  end;
-parse_fetch_result("RFC822.SIZE", Str) ->
-  ?LOG_DEBUG("parse_fetch_result.RFC822.SIZE: ~p~n", [Str]),
-  case re:run(Str, "RFC822.SIZE (?<SIZE>\\d+)", [{capture, ["SIZE"], list}]) of
-    {match, [Size]} -> {ok, ?l2i(Size)};
-    _ -> {error, not_found}
-  end;
-parse_fetch_result("RFC822", Str) ->
-  case re:run(Str, "\\(RFC822 {\\d+}(?<RAW>.*)\\)", [{capture, ["RAW"], list}, dotall]) of
-    {match, [Raw]} -> {ok, Raw};
-    _ -> {error, not_found}
-  end;
-parse_fetch_result("HAS_ATTACHEMENT", Str) ->
-  ?LOG_DEBUG("parse_fetch_result.HAS_ATTACHEMENT: ~p~n", [Str]),
-  case re:run(Str, "\\(\"attachment\" \\(\"FILENAME\" \"", []) of
-    {match, _} -> true;
-    _ -> false
-  end;
-parse_fetch_result("FLAGS", Str) ->
-  ?LOG_DEBUG("parse_fetch_result.FLAGS: ~p~n", [Str]),
-  case re:run(Str, "FLAGS \\((?<FLAGS>.*?)\\)", [{capture, ["FLAGS"], list}]) of
-    {match, [Flags]} -> {ok, string:tokens(string:to_upper(Flags), " ")};
-    _ -> {error, not_found}
-  end;
-parse_fetch_result("ENVELOPE", Str) ->
-  ?LOG_DEBUG("parse_fetch_result.ENVELOPE: ~p~n", [Str]),
-  RE = "ENVELOPE \\(\"(?<DATE>.*?)\" \"(?<SUBJECT>.*?)\" \\(\\(\"?(?<EMAILNAME>.*?)\"? .*? \"(?<EMAILID>.*?)\" \"(?<EMAILHOST>.*?)\"\\)",
-  Fields = ["DATE","SUBJECT","EMAILNAME","EMAILID","EMAILHOST"],
-  case re:run(Str, RE, [{capture, Fields,list}]) of
-    {match, Value} -> {ok, lists:zip(Fields, Value)};
-    _ -> {error, not_found}
-  end.
+% parse_fetch_result("INTERNALDATE", Str) ->
+%   case re:run(Str, "INTERNALDATE \"(?<DATE>.*?)\"", [{capture, ["DATE"], list}]) of
+%     {match, [Date]} -> {ok, Date};
+%     _ -> {error, not_found}
+%   end;
+% parse_fetch_result("RFC822.SIZE", Str) ->
+%   ?LOG_DEBUG("parse_fetch_result.RFC822.SIZE: ~p~n", [Str]),
+%   case re:run(Str, "RFC822.SIZE (?<SIZE>\\d+)", [{capture, ["SIZE"], list}]) of
+%     {match, [Size]} -> {ok, ?l2i(Size)};
+%     _ -> {error, not_found}
+%   end;
+% parse_fetch_result("RFC822", Str) ->
+%   case re:run(Str, "\\(RFC822 {\\d+}(?<RAW>.*)\\)", [{capture, ["RAW"], list}, dotall]) of
+%     {match, [Raw]} -> {ok, Raw};
+%     _ -> {error, not_found}
+%   end;
+% parse_fetch_result("HAS_ATTACHEMENT", Str) ->
+%   ?LOG_DEBUG("parse_fetch_result.HAS_ATTACHEMENT: ~p~n", [Str]),
+%   case re:run(Str, "(?i)\\(\"attachment\" \\(\"FILENAME\" \"(?-i)", []) of
+%     {match, _} -> true;
+%     _ -> false
+%   end;
+% parse_fetch_result("FLAGS", Str) ->
+%   ?LOG_DEBUG("parse_fetch_result.FLAGS: ~p~n", [Str]),
+%   case re:run(Str, "FLAGS \\((?<FLAGS>.*?)\\)", [{capture, ["FLAGS"], list}]) of
+%     {match, [Flags]} -> {ok, string:tokens(string:to_upper(Flags), " ")};
+%     _ -> {error, not_found}
+%   end;
+% parse_fetch_result("ENVELOPE", Str) ->
+%   ?LOG_DEBUG("parse_fetch_result.ENVELOPE: ~p~n", [Str]),
+%   RE = "ENVELOPE \\(\"(?<DATE>.*?)\" \"(?<SUBJECT>.*?)\" \\(\\(\"?(?<EMAILNAME>.*?)\"? .*? \"(?<EMAILID>.*?)\" \"(?<EMAILHOST>.*?)\"\\)",
+%   Fields = ["DATE","SUBJECT","EMAILNAME","EMAILID","EMAILHOST"],
+%   case re:run(Str, RE, [{capture, Fields,list}]) of
+%     {match, Value} -> {ok, lists:zip(Fields, Value)};
+%     _ -> {error, not_found}
+%   end.
+
+parse_fetch_result(Str) ->
+  ?LOG_DEBUG("~nparse_fetch_result:~p~n", [Str]),
+  parse_fetch_result(Str, []).
+
+
+parse_fetch_result([], Acc) ->
+  lists:foldl(
+    fun(Value, {Key, Acc2}) -> [{Key, Value} | Acc2]; 
+       (Key, Acc2) -> {Key, Acc2}
+    end, [], hd(Acc)); 
+parse_fetch_result([$( | Rest], Acc) ->
+  {Str2, Acc2} = parse_fetch_result(Rest, []),
+  parse_fetch_result(Str2, Acc ++ [Acc2]);
+parse_fetch_result(Str = [$" | _], Acc) ->
+  {match, [{0, Len}]} = re:run(Str, "\".*?\""),
+  {Value, Str2} = lists:split(Len-1, Str), 
+  parse_fetch_result(tl(Str2), Acc ++ [tl(Value)]);
+parse_fetch_result([32 | Rest], Acc) ->
+  parse_fetch_result(Rest, Acc);
+parse_fetch_result([$) | Rest], Acc) ->
+  {Rest, Acc};
+parse_fetch_result(Str, Acc) ->
+  {match, [{0, Len}]} = re:run(Str, "(.*?)[\\s)]", [{capture, all_but_first}]),
+  {Value, Str2} = lists:split(Len, Str), 
+  Value2 =
+    case is_integer_str(Value) of
+      true -> list_to_integer(Value); 
+      false -> list_to_atom(Value) 
+    end,
+  parse_fetch_result(Str2, Acc ++ [Value2]).
+
+make_envelope([DATE, SUBJECT, FROMs, SENDERs, REPLYTOs, TOs, CCs, BCCs, INREPLYTO, MESSAGEID]) ->
+  #envelope{
+    env_date = DATE,
+    env_subject = header_to_utf8(SUBJECT),
+    env_from = make_addresses(FROMs),
+    env_sender = make_addresses(SENDERs),
+    env_reply_to = make_addresses(REPLYTOs),
+    env_to = make_addresses(TOs),
+    env_cc = make_addresses(CCs),
+    env_bcc = make_addresses(BCCs),
+    env_in_reply_to = INREPLYTO,
+    env_message_id = MESSAGEID
+  }.
+make_addresses('NIL') -> 'NIL';
+make_addresses(Addrs) -> make_addresses(Addrs, []).
+make_addresses([], Acc) -> Acc;
+make_addresses([[NAME, ADL, MAILBOX, HOST]| Rest], Acc) ->
+  Addr = #address{
+    addr_name = header_to_utf8(NAME),
+    addr_adl = ADL,
+    addr_mailbox = MAILBOX,
+    addr_host = HOST
+  },
+  make_addresses(Rest, [Addr | Acc]).
 
 
 %% @doc Decode and Encode rfc3501 Mailbox.
@@ -202,6 +259,19 @@ decode_rfc3501_mailbox(S) ->
   iconv:close(Cd), 
   [?b2l(Bin)].
 
+is_integer_str([]) -> false;
+is_integer_str(List) when is_list(List) -> is_integer_str_1(List); 
+is_integer_str(_) -> false.
+is_integer_str_1([]) -> true;
+is_integer_str_1([H | Rest]) when is_integer(H),H >= 48,H =< 57 -> is_integer_str_1(Rest); 
+is_integer_str_1(_) -> false.
+
+header_to_utf8(Content) when is_list(Content) ->
+  header_to_utf8(list_to_binary(Content));
+header_to_utf8(Content) when is_binary(Content) ->
+  binary_to_list(mimemail:decode_header(Content, "utf8")); 
+header_to_utf8(Other) ->
+  Other.
 
 %%%-----------
 %%% tests

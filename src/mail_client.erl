@@ -320,10 +320,11 @@ handle_call({imap_list_message, FromSeq, ToSeq}, _From, State = #state{fsm=Fsm})
     {reply, do_imap_list_message(Fsm, FromSeq, ToSeq), State};
 handle_call({imap_retrieve_message, FromSeq, ToSeq}, _From, State = #state{fsm=Fsm, handler=Handler}) ->
     SeqSet = lists:concat([FromSeq, ":", ToSeq]),
-    {ok, RawMessageList} = Handler:fetch(Fsm, SeqSet, "(rfc822)"),
+    {ok, RawMessageList} = Handler:fetch(Fsm, SeqSet, "rfc822"),
+    ?LOG_DEBUG("~nFetch resp:~p~n", [RawMessageList]),
     ParsedMessageList = lists:map(
         fun({Seq, Content}) ->
-            {ok, Raw} = imapc_util:parse_fetch_result("RFC822", Content),
+            {match, [Raw]} = re:run(Content, "\\(RFC822 {\\d+}(?<RAW>.*)\\)", [{capture, ["RAW"], list}, dotall]),
             {Seq, retrieve_util:raw_message_to_mail(Raw)}
         end, RawMessageList), 
     {reply, {ok, ParsedMessageList}, State};
@@ -380,11 +381,13 @@ do_imap_list_message(Fsm, FromSeq, ToSeq) ->
     {ok, MessageList} = imapc:fetch(Fsm, SeqSet, DataItems),
     MessageList2 = lists:map(
         fun({Seq, Content}) ->
-            {ok, Envelope} = imapc_util:parse_fetch_result("ENVELOPE", Content),
-            HasAttachment = imapc_util:parse_fetch_result("HAS_ATTACHEMENT", Content),
-            {ok, Size} = imapc_util:parse_fetch_result("RFC822.SIZE", Content),
-            {ok, Flags} = imapc_util:parse_fetch_result("FLAGS", Content),
-            {Seq, [{"HAS_ATTACHEMENT", HasAttachment}, {"SIZE", Size}, {"FLAGS", Flags} | Envelope]}
+            ParsedRlt = imapc_util:parse_fetch_result(Content), 
+            Envelope = imapc_util:make_envelope(proplists:get_value('ENVELOPE', ParsedRlt)),
+            %HasAttachment = imapc_util:parse_fetch_result("HAS_ATTACHEMENT", Content),
+            {Seq, [{"HAS_ATTACHEMENT", false},
+                   {"SIZE", proplists:get_value('RFC822.SIZE', ParsedRlt)},
+                   {"FLAGS", proplists:get_value('FLAGS', ParsedRlt)},
+                   {"ENVELOPE", Envelope}]}
         end, MessageList), 
     {ok, MessageList2}.
 
