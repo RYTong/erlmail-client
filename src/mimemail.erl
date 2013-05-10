@@ -141,8 +141,8 @@ decode_headers([{Key, Value} | Headers], Acc, Charset) ->
 	decode_headers(Headers, [{Key, decode_header(Value, Charset)} | Acc], Charset).
 
 collect_all_encoded_words(Value, CurPos, Encoding, Type, Acc) ->
-	case re:run(Value, "=\\?"++Encoding++"\\?"++Type++"\\?([^\s]+)\\?=", [ungreedy]) of
-		{match,[{0, AllLen},{DataStart, DataLen}]} ->
+	case re:run(Value, "([\s\t\n\r]*)=\\?"++Encoding++"\\?"++Type++"\\?([^\s]+)\\?=", [ungreedy]) of
+		{match,[{0, AllLen},{0, _SpLen},{DataStart, DataLen}]} ->
 			Data = binstr:substr(Value, DataStart+1, DataLen),
 			RestValue = binstr:substr(Value, AllLen + 1),
 			collect_all_encoded_words(RestValue, (CurPos + AllLen), Encoding, Type, [Data | Acc]);
@@ -183,15 +183,14 @@ decode_header(Value, Charset) ->
 			{ok, DecodedData} = iconv:conv(CD, DataBin),
 			iconv:close(CD),
 
-			Offset = case re:run(binstr:substr(Value, AllStart + AllLen + 1), "^([\s\t\n\r]+)=\\?[-A-Za-z0-9_]+\\?[^\s]\\?[^\s]+\\?=", [ungreedy]) of
-				nomatch ->
-					% no 2047 block immediately following
-					1;
-				{match,[{_, _},{_, WhiteSpaceLen}]} ->
-					1+ WhiteSpaceLen
-			end,
-
-			NewValue = list_to_binary([binstr:substr(Value, 1, AllStart), DecodedData, binstr:substr(Value, CurPos + Offset)]),
+			%Offset = case re:run(binstr:substr(Value, AllStart + AllLen + 1), "^([\s\t\n\r]+)=\\?[-A-Za-z0-9_]+\\?[^\s]\\?[^\s]+\\?=", [ungreedy]) of
+			%	nomatch ->
+			%		% no 2047 block immediately following
+			%		1;
+			%	{match,[{_, _},{_, WhiteSpaceLen}]} ->
+			%		1+ WhiteSpaceLen
+			%end,
+			NewValue = list_to_binary([binstr:substr(Value, 1, AllStart), DecodedData, binstr:substr(Value, CurPos + 1)]),
 			decode_header(NewValue, Charset)
 	end.
 

@@ -269,7 +269,12 @@ is_integer_str_1(_) -> false.
 header_to_utf8(Content) when is_list(Content) ->
   header_to_utf8(list_to_binary(Content));
 header_to_utf8(Content) when is_binary(Content) ->
-  binary_to_list(mimemail:decode_header(Content, "utf8")); 
+  try
+    binary_to_list(mimemail:decode_header(Content, "utf8"))
+   catch _:_ ->
+     ?LOG_DEBUG("failed to decode header: ~p~n", [Content]),
+     binary_to_list(Content) 
+   end;
 header_to_utf8(Other) ->
   Other.
 
