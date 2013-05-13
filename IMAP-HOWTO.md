@@ -18,10 +18,16 @@ mail_client也封装了一些常用操作的接口，当然，这些接口也全
 {ok, {Mailbox, Mails}} = mail_client:imap_select_mailbox(Pid, "\\Inbox", 5),
 %% 列出从15条至23条邮件简要信息
 {ok, Mails} = mail_client:imap_list_message(Pid, 15, 23),
-%% 获取第20条邮件内容
-{ok, Mail} = mail_client:imap_retrieve_message(Pid, 20),
+%% 获取第20条邮件报文
+{ok, [{20, Raw}]} = mail_client:imap_retrieve_message(Pid, 20),
+%% 解码mimemail内容
+retrieve_util:raw_message_to_mail(Raw),
 %% 设置第20条邮件为已读
 mail_client:imap_seen_message(Pid, 20),
+%% 获取第20封邮件的所有附件报文(已知附件存在于mimemail的第2,3段中)
+mail_client:imap_retrieve_part(Pid, ["BODY[2]","BODY[3]"], 20),
+%% 解码获取的附件报文(已知其content-transfer-encoding为base64)
+mimemail:decode_body(<<"base64", Raw),
 %% 将该邮件移到回收站
 mail_client:imap_trash_message(Pid, 20),
 %% 清空当前邮件箱标记为\Deleted的邮件

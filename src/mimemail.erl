@@ -57,6 +57,8 @@
 
 -export([decode_headers/2, decode_header/2]). % XXX: 
 
+-export([decode_body/2]).
+
 -define(DEFAULT_OPTIONS, [
 		{encoding, get_default_encoding()}, % default encoding is utf-8 if we can find the iconv module
 		{decode_attachments, true} % should we decode any base64/quoted printable attachments?

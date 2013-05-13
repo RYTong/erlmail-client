@@ -93,3 +93,36 @@
     addr_mailbox,
     addr_host
   }).
+
+
+-record(body_type_basic, {
+    type,
+    fields
+  }).
+
+-record(body_type_other, {
+    basic,
+    lines
+  }).
+
+-record(body_fields, {
+    param,
+    id,
+    desc,
+    enc,
+    octets,
+    dsp
+  }).
+
+-record(disposition, {
+    type,
+    value=[]
+  }).
+
+-record(body_ext_1part, {
+    md5,
+    dsp,
+    lang,
+    loc,
+    extension
+  }).

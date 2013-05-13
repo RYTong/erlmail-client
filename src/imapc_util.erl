@@ -152,10 +152,7 @@ parse_fetch_result(Str) ->
 
 
 parse_fetch_result([], Acc) ->
-  lists:foldl(
-    fun(Value, {Key, Acc2}) -> [{Key, Value} | Acc2]; 
-       (Key, Acc2) -> {Key, Acc2}
-    end, [], hd(Acc)); 
+  pack_kv(hd(Acc));
 parse_fetch_result([$( | Rest], Acc) ->
   {Str2, Acc2} = parse_fetch_result(Rest, []),
   parse_fetch_result(Str2, Acc ++ [Acc2]);
@@ -163,6 +160,15 @@ parse_fetch_result(Str = [$" | _], Acc) ->
   {match, [{0, Len}]} = re:run(Str, "\".*?\""),
   {Value, Str2} = lists:split(Len-1, Str), 
   parse_fetch_result(tl(Str2), Acc ++ [tl(Value)]);
+parse_fetch_result(Str = [${ | _], Acc) ->
+  {match, [{0, Len}]} = re:run(Str, "{\\d+}"),
+  {Value, Str2} = lists:split(Len, Str), 
+  N = list_to_integer(lists:sublist(Value, 2, Len-2)), 
+  {Value2, Str3} = lists:split(N, Str2), 
+  parse_fetch_result(Str3, Acc ++ [Value2]);
+
+parse_fetch_result([$\r, $\n | Rest], Acc) ->
+  parse_fetch_result(Rest, Acc);
 parse_fetch_result([32 | Rest], Acc) ->
   parse_fetch_result(Rest, Acc);
 parse_fetch_result([$) | Rest], Acc) ->
@@ -187,7 +193,7 @@ make_envelope([DATE, SUBJECT, FROMs, SENDERs, REPLYTOs, TOs, CCs, BCCs, INREPLYT
     env_to = make_addresses(TOs),
     env_cc = make_addresses(CCs),
     env_bcc = make_addresses(BCCs),
-    env_in_reply_to = INREPLYTO,
+    env_in_reply_to = header_to_utf8(INREPLYTO),
     env_message_id = MESSAGEID
   }.
 make_addresses('NIL') -> 'NIL';
@@ -201,6 +207,102 @@ make_addresses([[NAME, ADL, MAILBOX, HOST]| Rest], Acc) ->
     addr_host = HOST
   },
   make_addresses(Rest, [Addr | Acc]).
+
+% body            = "(" (body-type-1part / body-type-mpart) ")"
+
+% body-type-1part = (body-type-basic / body-type-msg / body-type-text)
+%                   [SP body-ext-1part]
+% body-type-basic = media-basic SP body-fields
+% media-basic     = ((DQUOTE ("APPLICATION" / "AUDIO" / "IMAGE" /
+%                   "MESSAGE" / "VIDEO") DQUOTE) / string) SP
+%                   media-subtype
+% media-subtype   = string
+% body-fields     = body-fld-param SP body-fld-id SP body-fld-desc SP
+%                   body-fld-enc SP body-fld-octets
+% body-fld-param  = "(" string SP string *(SP string SP string) ")" / nil
+% body-fld-id     = nstring
+% body-fld-desc   = nstring
+% body-fld-enc    = (DQUOTE ("7BIT" / "8BIT" / "BINARY" / "BASE64"/
+%                   "QUOTED-PRINTABLE") DQUOTE) / string
+% body-fld-octets = number
+
+% body-type-msg   = media-message SP body-fields SP envelope
+%                   SP body SP body-fld-lines
+% media-message   = DQUOTE "MESSAGE" DQUOTE SP DQUOTE "RFC822" DQUOTE
+
+% body-type-text  = media-text SP body-fields SP body-fld-lines
+% media-text      = DQUOTE "TEXT" DQUOTE SP media-subtype
+% body-ext-1part  = body-fld-md5 [SP body-fld-dsp [SP body-fld-lang
+%                   [SP body-fld-loc *(SP body-extension)]]]
+
+
+% body-type-mpart = 1*body SP media-subtype
+%                   [SP body-ext-mpart]
+% media-subtype   = string
+% body-ext-mpart  = body-fld-param [SP body-fld-dsp [SP body-fld-lang
+%                   [SP body-fld-loc *(SP body-extension)]]]
+% body-fld-param  = "(" string SP string *(SP string SP string) ")" / nil
+% body-fld-dsp    = "(" string SP body-fld-param ")" / nil
+% body-fld-lang   = nstring / "(" string *(SP string) ")"
+% body-fld-loc    = nstring
+% body-extension  = nstring / number / "(" body-extension *(SP body-extension) ")"
+% nstring         = string / nil
+% string          = quoted / literal
+% quoted          = DQUOTE *QUOTED-CHAR DQUOTE
+% QUOTED-CHAR     = <any TEXT-CHAR except quoted-specials> / "\" quoted-specials
+% quoted-specials = DQUOTE / "\"
+% literal         = "{" number "}" CRLF *CHAR8
+
+% body            = "(" (body-type-1part / body-type-mpart) ")"
+parse_bodystructure(BodyStructure) ->
+  S = parse_bodystructure(BodyStructure, [1]),
+  case parse_bodystructure_1([S]) of
+    {_, SubType, Parts} -> {"BODY[]", SubType, Parts};
+    Part -> Part
+  end.
+% body-type-1part = (body-type-basic / body-type-msg / body-type-text) [SP body-ext-1part]
+% body-type-msg   = media-message SP body-fields SP envelope SP body SP body-fld-lines
+parse_bodystructure(["message", "rfc822", Params, Id, Desc, Enc, Octets, _, _, Lines], P) ->
+  body_type_msg(P, Params, Id, Desc, Enc, Octets, Lines);
+parse_bodystructure(["message", "rfc822", Params, Id, Desc, Enc, Octets, _, _, Lines, _Md5, Dsp|_], P) ->
+  body_type_msg(P, Params, Id, Desc, Enc, Octets, Lines, Dsp);
+parse_bodystructure(["message", "rfc822", Params, Id, Desc, Enc, Octets, _, _, Lines|_], P) ->
+  body_type_msg(P, Params, Id, Desc, Enc, Octets, Lines);
+% body-type-text  = media-text SP body-fields SP body-fld-lines
+parse_bodystructure(["text", SubType, Params, Id, Desc, Enc, Octets, Lines], P) ->
+  body_type_text(P, SubType, Params, Id, Desc, Enc, Octets, Lines);
+parse_bodystructure(["text", SubType, Params, Id, Desc, Enc, Octets, Lines, _Md5, Dsp|_], P) ->
+  body_type_text(P, SubType, Params, Id, Desc, Enc, Octets, Lines, Dsp);
+parse_bodystructure(["text", SubType, Params, Id, Desc, Enc, Octets, Lines|_], P) ->
+  body_type_text(P, SubType, Params, Id, Desc, Enc, Octets, Lines);
+% body-type-basic = media-basic SP body-fields
+parse_bodystructure([Type, SubType, Params, Id, Desc, Enc, Octets], P) when is_list(Type), is_integer(hd(Type))->
+  body_type_basic(P, Type, SubType, Params, Id, Desc, Enc, Octets);
+parse_bodystructure([Type, SubType, Params, Id, Desc, Enc, Octets, _Md5, Dsp|_], P) when is_list(Type), is_integer(hd(Type))->
+  body_type_basic(P, Type, SubType, Params, Id, Desc, Enc, Octets, Dsp);
+parse_bodystructure([Type, SubType, Params, Id, Desc, Enc, Octets|_], P) when is_list(Type), is_integer(hd(Type))->
+  body_type_basic(P, Type, SubType, Params, Id, Desc, Enc, Octets);
+%% body-type-mpart = 1*body SP media-subtype [SP body-ext-mpart]
+parse_bodystructure(MPart, P) ->
+  SubTypePos = find_mpart_subtype_pos(MPart),
+  {Bodies, [SubType|_]} = lists:split(SubTypePos, MPart), 
+  {_, Parts} = lists:foldl(
+    fun(Body, {N, Acc}) ->
+      {N+1, [parse_bodystructure(Body, [N | P]) | Acc]}
+    end, {1, []}, Bodies), 
+  {P, SubType, Parts}.
+
+%% add body specifier.
+parse_bodystructure_1(Parts) ->
+  parse_bodystructure_1(Parts, []).
+parse_bodystructure_1([], Acc) ->
+  Acc;
+parse_bodystructure_1([{P, SubType, Parts} | Rest], Acc) ->
+  Acc2 = parse_bodystructure_1(Parts),
+  parse_bodystructure_1(Rest, [{body_specifier(P), SubType, Acc2} | Acc]);
+parse_bodystructure_1([{P, Body} | Rest], Acc) ->
+  parse_bodystructure_1(Rest, [{body_specifier(P), Body} | Acc]).
+
 
 
 %% @doc Decode and Encode rfc3501 Mailbox.
@@ -277,6 +379,80 @@ header_to_utf8(Content) when is_binary(Content) ->
    end;
 header_to_utf8(Other) ->
   Other.
+
+find_mpart_subtype_pos(MPart) ->
+  find_mpart_subtype_pos(MPart, 0).
+find_mpart_subtype_pos([SubType | _Rest], Pos) when is_list(SubType), is_integer(hd(SubType))->
+  Pos;
+find_mpart_subtype_pos([_ | Rest], Pos) ->
+  find_mpart_subtype_pos(Rest, Pos+1).
+
+pack_kv(Params) ->
+  lists:foldl(
+    fun(Value, {Key, Acc2}) -> [{Key, Value} | Acc2]; 
+       (Key, Acc2) -> {Key, Acc2}
+    end, [], Params). 
+
+body_specifier([N]) ->
+  lists:concat(["BODY[", integer_to_list(N), "]"]); 
+body_specifier(NList) ->
+  Nums = tl(lists:reverse(NList)),
+  Nums2 = tl(lists:concat(["."++integer_to_list(N) || N <- Nums])),
+  lists:concat(["BODY[", Nums2, "]"]).
+
+field_dsp('NIL') ->
+  #disposition{};
+field_dsp([Type, Value]) ->
+  #disposition{
+    type = Type,
+    value = pack_kv(Value)
+  }.
+
+body_type_msg(P, Params, Id, Desc, Enc, Octets, Lines) ->
+  body_type_msg(P, Params, Id, Desc, Enc, Octets, Lines, [undefined, []]).
+body_type_msg(P, Params, Id, Desc, Enc, Octets, Lines, Dsp) ->
+  {P, #body_type_other{
+        basic = #body_type_basic{
+          type = "message/rfc822",
+          fields = #body_fields{
+                          param = pack_kv(Params),
+                          id = Id,
+                          desc = Desc,
+                          enc = Enc,
+                          octets = Octets,
+                          dsp = field_dsp(Dsp)}},
+        lines = Lines}
+  }.
+
+body_type_text(P, SubType, Params, Id, Desc, Enc, Octets, Lines) ->
+  body_type_text(P, SubType, Params, Id, Desc, Enc, Octets, Lines, [undefined, []]).
+body_type_text(P, SubType, Params, Id, Desc, Enc, Octets, Lines, Dsp) ->
+  {P, #body_type_other{
+        basic = #body_type_basic{
+          type = lists:concat(["text/", SubType]), 
+          fields = #body_fields{
+                          param = pack_kv(Params),
+                          id = Id,
+                          desc = Desc,
+                          enc = Enc,
+                          octets = Octets,
+                          dsp = field_dsp(Dsp)}},
+        lines = Lines}
+  }.
+
+body_type_basic(P, Type, SubType, Params, Id, Desc, Enc, Octets) ->
+  body_type_basic(P, Type, SubType, Params, Id, Desc, Enc, Octets, [undefined, []]).
+body_type_basic(P, Type, SubType, Params, Id, Desc, Enc, Octets, Dsp) ->
+  {P, #body_type_basic{
+        type = lists:concat([Type, "/", SubType]),
+        fields = #body_fields{
+                      param = pack_kv(Params),
+                      id = Id,
+                      desc = Desc,
+                      enc = Enc,
+                      octets = Octets,
+                      dsp = field_dsp(Dsp)}}
+  }.
 
 %%%-----------
 %%% tests

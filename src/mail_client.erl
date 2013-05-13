@@ -49,8 +49,9 @@
 -export([imap_list_mailbox/1, imap_list_mailbox/2,
          imap_select_mailbox/1, imap_select_mailbox/2, imap_select_mailbox/3,
          imap_save_draft/2]).
--export([imap_list_message/3,
+-export([imap_list_message/2, imap_list_message/3,
          imap_retrieve_message/2, imap_retrieve_message/3,
+         imap_retrieve_part/3,
          imap_seen_message/2,
          imap_trash_message/2,
          imap_move_message/3,
@@ -164,6 +165,8 @@ imap_select_mailbox(Pid, Mailbox, Num) when is_list(Mailbox), is_integer(Num), N
     gen_server:call(Pid, {imap_select_mailbox, Mailbox, Num}). 
 
 %% list messages with simple desc.
+imap_list_message(Pid, Seq) when is_integer(Seq) ->
+    imap_list_message(Pid, Seq, Seq). 
 imap_list_message(Pid, FromSeq, ToSeq) when is_integer(FromSeq), is_integer(ToSeq), FromSeq =< ToSeq->
     gen_server:call(Pid, {imap_list_message, FromSeq, ToSeq}). 
 
@@ -172,6 +175,12 @@ imap_retrieve_message(Pid, MsgSeq) when is_integer(MsgSeq)->
     imap_retrieve_message(Pid, MsgSeq, MsgSeq).
 imap_retrieve_message(Pid, FromSeq, ToSeq) when is_integer(FromSeq), is_integer(ToSeq)->
     gen_server:call(Pid, {imap_retrieve_message, FromSeq, ToSeq}, infinity). 
+
+%% retrieve mime mail part.
+imap_retrieve_part(Pid, Section, Seq) when is_list(Section), is_integer(hd(Section))->
+    imap_retrieve_part(Pid, [Section], Seq);
+imap_retrieve_part(Pid, Section, Seq) when is_integer(Seq) ->
+    gen_server:call(Pid, {imap_retrieve_part, Section, Seq}).
 
 %% RFC2822Msg SHOULD be in the format of an [RFC-2822] message.
 imap_save_draft(Pid, RFC2822Msg) when is_list(RFC2822Msg) ->
@@ -325,9 +334,17 @@ handle_call({imap_retrieve_message, FromSeq, ToSeq}, _From, State = #state{fsm=F
     ParsedMessageList = lists:map(
         fun({Seq, Content}) ->
             {match, [Raw]} = re:run(Content, "\\(RFC822 {\\d+}(?<RAW>.*)\\)", [{capture, ["RAW"], list}, dotall]),
-            {Seq, retrieve_util:raw_message_to_mail(Raw)}
+            %{Seq, retrieve_util:raw_message_to_mail(Raw)}
+            {Seq, Raw}
         end, RawMessageList), 
     {reply, {ok, ParsedMessageList}, State};
+handle_call({imap_retrieve_part, Sections, Seq}, _From, State = #state{fsm=Fsm, handler=Handler}) ->
+    %SeqSet = lists:concat([FromSeq, ":", ToSeq]),
+    BodyPart = tl(lists:concat([" "++Section || Section <- Sections])), 
+    {ok, [{_, Resp}]} = Handler:fetch(Fsm, integer_to_list(Seq), lists:concat(["(",BodyPart,")"])),
+    ParsedBodyParts = imapc_util:parse_fetch_result(Resp), 
+    ?LOG_DEBUG("~nFetch part:~p~n", [Resp]),
+    {reply, {ok, ParsedBodyParts}, State};
 handle_call({imap_save_draft, MailText}, _From, State = #state{fsm=Fsm, handler=Handler}) ->
     Reply = Handler:append(Fsm, "\\Drafts", "()", MailText),
     {reply, Reply, State};
@@ -384,10 +401,11 @@ do_imap_list_message(Fsm, FromSeq, ToSeq) ->
             ParsedRlt = imapc_util:parse_fetch_result(Content), 
             Envelope = imapc_util:make_envelope(proplists:get_value('ENVELOPE', ParsedRlt)),
             %HasAttachment = imapc_util:parse_fetch_result("HAS_ATTACHEMENT", Content),
-            {Seq, [{"HAS_ATTACHEMENT", false},
-                   {"SIZE", proplists:get_value('RFC822.SIZE', ParsedRlt)},
+            {Seq, [{"SIZE", proplists:get_value('RFC822.SIZE', ParsedRlt)},
                    {"FLAGS", proplists:get_value('FLAGS', ParsedRlt)},
-                   {"ENVELOPE", Envelope}]}
+                   {"ENVELOPE", Envelope},
+                   %{"B", imapc_util:parse_bodystructure(proplists:get_value('BODYSTRUCTURE', ParsedRlt))},
+                   {"BODYSTRUCTURE", proplists:get_value('BODYSTRUCTURE', ParsedRlt)}]}
         end, MessageList), 
     {ok, MessageList2}.
 
