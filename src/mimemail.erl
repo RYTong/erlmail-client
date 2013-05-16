@@ -479,6 +479,10 @@ decode_body(Type, Body, InEncoding, OutEncoding) ->
 -spec(decode_body/2 :: (Type :: binary() | 'undefined', Body :: binary()) -> binary()).
 decode_body(undefined, Body) ->
 	Body;
+decode_body(Type, Body) when is_list(Type) ->
+	decode_body(list_to_binary(Type), Body);
+decode_body(Type, Body) when is_list(Body) ->
+	decode_body(Type, list_to_binary(Body));
 decode_body(Type, Body) ->
 	case binstr:to_lower(Type) of
 		<<"quoted-printable">> ->

@@ -8,11 +8,11 @@
          gen_tag/0, quote_mbox/1, to_key/1]).
 -export([to_binary/1, to_int/1, to_list/1, to_float/1, to_atom/1]).
 
--export([parse_fetch_result/1]).
+-export([parse_fetch_result/1, parse_bodystructure/1]).
 
 -export([mailbox_to_utf8/1]).
 
--compile([nowarn_unused_function, export_all]).
+-compile([nowarn_unused_function]).
 
 %%%------------------
 %%% Utility functions
@@ -257,8 +257,8 @@ make_addresses([[NAME, ADL, MAILBOX, HOST]| Rest], Acc) ->
 parse_bodystructure(BodyStructure) ->
   S = parse_bodystructure(BodyStructure, [1]),
   case parse_bodystructure_1([S]) of
-    {_, SubType, Parts} -> {"BODY[]", SubType, Parts};
-    Part -> Part
+    [{_, SubType, Parts}] -> {"BODY[]", SubType, Parts};
+    [Part] -> Part
   end.
 % body-type-1part = (body-type-basic / body-type-msg / body-type-text) [SP body-ext-1part]
 % body-type-msg   = media-message SP body-fields SP envelope SP body SP body-fld-lines
@@ -290,7 +290,7 @@ parse_bodystructure(MPart, P) ->
     fun(Body, {N, Acc}) ->
       {N+1, [parse_bodystructure(Body, [N | P]) | Acc]}
     end, {1, []}, Bodies), 
-  {P, SubType, Parts}.
+  {P, lists:concat(["multipart/", SubType]), Parts}.
 
 %% add body specifier.
 parse_bodystructure_1(Parts) ->
@@ -387,6 +387,7 @@ find_mpart_subtype_pos([SubType | _Rest], Pos) when is_list(SubType), is_integer
 find_mpart_subtype_pos([_ | Rest], Pos) ->
   find_mpart_subtype_pos(Rest, Pos+1).
 
+pack_kv('NIL') -> [];
 pack_kv(Params) ->
   lists:foldl(
     fun(Value, {Key, Acc2}) -> [{Key, Value} | Acc2]; 
