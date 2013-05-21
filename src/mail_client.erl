@@ -180,7 +180,7 @@ imap_retrieve_message(Pid, FromSeq, ToSeq) when is_integer(FromSeq), is_integer(
 imap_retrieve_part(Pid, Section, Seq) when is_list(Section), is_integer(hd(Section))->
     imap_retrieve_part(Pid, [Section], Seq);
 imap_retrieve_part(Pid, Section, Seq) when is_integer(Seq) ->
-    gen_server:call(Pid, {imap_retrieve_part, Section, Seq}).
+    gen_server:call(Pid, {imap_retrieve_part, Section, Seq}, infinity).
 
 %% RFC2822Msg SHOULD be in the format of an [RFC-2822] message.
 imap_save_draft(Pid, RFC2822Msg) when is_list(RFC2822Msg) ->
