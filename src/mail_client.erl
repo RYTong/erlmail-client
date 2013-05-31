@@ -346,7 +346,7 @@ handle_call({imap_retrieve_part, Sections, Seq}, _From, State = #state{fsm=Fsm, 
     ?LOG_DEBUG("~nFetch part:~p~n", [Resp]),
     {reply, {ok, ParsedBodyParts}, State};
 handle_call({imap_save_draft, MailText}, _From, State = #state{fsm=Fsm, handler=Handler}) ->
-    Reply = Handler:append(Fsm, "\\Drafts", "()", MailText),
+    Reply = Handler:append(Fsm, "Drafts", "()", MailText),
     {reply, Reply, State};
 handle_call({imap_seen_message, SeqSet}, _From, State = #state{fsm=Fsm, handler=Handler}) ->
     Reply = Handler:store(Fsm, SeqSet, "+FLAGS", "(\\Seen)"),
