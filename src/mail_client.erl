@@ -317,14 +317,17 @@ handle_call({imap_list_mailbox, RefName}, _From, State = #state{fsm=Fsm, handler
     {reply, Reply, State};
 handle_call({imap_select_mailbox, Mailbox, Num}, _From, State = #state{fsm=Fsm, handler=Handler}) ->
     {ok, SelectedMailbox} = Handler:select(Fsm, Mailbox), 
-    MsgSize = SelectedMailbox#mailbox.exists,
-    FromSeq =
-        if
-            MsgSize =< Num -> 1;
-            true -> (MsgSize - Num + 1)
-        end,
-    {ok, MessageList} = do_imap_list_message(Fsm, FromSeq, MsgSize),
-    {reply, {ok, {SelectedMailbox, MessageList}}, State};
+    case SelectedMailbox#mailbox.exists of
+        0 -> {reply, {ok, {SelectedMailbox, []}}, State};
+        MsgSize ->
+            FromSeq =
+                if
+                    MsgSize =< Num -> 1;
+                    true -> (MsgSize - Num + 1)
+                end,
+            {ok, MessageList} = do_imap_list_message(Fsm, FromSeq, MsgSize),
+            {reply, {ok, {SelectedMailbox, MessageList}}, State}
+    end;
 handle_call({imap_list_message, FromSeq, ToSeq}, _From, State = #state{fsm=Fsm}) ->
     {reply, do_imap_list_message(Fsm, FromSeq, ToSeq), State};
 handle_call({imap_retrieve_message, FromSeq, ToSeq}, _From, State = #state{fsm=Fsm, handler=Handler}) ->
