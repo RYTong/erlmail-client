@@ -10,7 +10,7 @@
 
 -export([parse_fetch_result/1, parse_bodystructure/1]).
 
--export([mailbox_to_utf8/1]).
+-export([mailbox_to_utf8/1, make_envelope/1]).
 
 -compile([nowarn_unused_function]).
 
