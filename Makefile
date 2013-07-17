@@ -4,4 +4,7 @@ compile:
 clean:
 	@./rebar clean
 
-.PHONY: compile clean
+deps:
+	@./rebar get-deps
+
+.PHONY: compile clean deps

@@ -27,15 +27,25 @@
                      render  %% <<"inline">>|<<"attachment">>
                     }).
 
--record(mail, {from,       %% binary()
-               to,         %% [binary()]
-               cc,         %% [binary()]
+%% @type mail() = #mail{from = binary(),
+%%			to = binary(),
+%%			cc = binary(),
+%%			bcc = binary(),
+%%			date = binary(),
+%%			id = binary(),
+%%			subject = binary(),
+%%			content = binary()|[binary()]|{html,binary()}|[binary()|{html,binary()}],
+%%			attachments = list()}
+%%
+-record(mail, {from,       
+               to,         
+               cc,        
                bcc,
-               date,       %% binary()
-               id,         %% binary()
-               subject,    %% binary()
-               content,    %% binary() | [binary()] |{html, binary()} |[binary()|{html, binary()}]
-               attachments  = []%% [attachment()]
+               date,     
+               id,      
+               subject,
+               content,
+               attachments  = []
               }).
 
 

@@ -1,8 +1,3 @@
-%% Copyright (c) 2009-2010 Beijing RYTong Information Technologies, Ltd.
-%% All rights reserved.
-%%
-%% No part of this source code may be copied, used, or modified
-%% without the express written consent of RYTong.
 -module(mail_client).
 -behaviour(gen_server).
 
@@ -10,7 +5,9 @@
 %% Include files
 %%
 
+%% @headerfile "../include/client.hrl"
 -include("client.hrl").
+%% @headerfile "../include/imap.hrl"
 -include("imap.hrl").
 -include("mimemail.hrl").
 
@@ -68,13 +65,17 @@
 %%
 
 
-%% Retrieve APIs
-
-%% Options = [imap | ssl | {timeout, integer()}]
+%% @spec (Host::string(), Port::integer(), User::string(),
+%%        Passwd::string(), Options::openopt()) -> {ok, pid()}
+%% @type openopt() = [imap | ssl | {timeout, integer()}]
+%% 
+%% @doc Open pop/imap connection for operation later.
 open_retrieve_session(Host, Port, User, Passwd, Options) ->
     process_flag(trap_exit, true), 
     gen_server:start_link(?MODULE, {Host, Port, User, Passwd, Options}, []).
 
+%% @spec (pid()) -> ok 
+%% @doc Close pop/imap connection.
 close_retrieve_session(Pid) ->
     case erlang:is_process_alive(Pid) of
         true -> gen_server:call(Pid, close);
@@ -83,49 +84,101 @@ close_retrieve_session(Pid) ->
     end.
 
 
+%% @spec (Pid::pid()) -> {ok, integer()}
+%% @equiv pop_list_size(Pid)
+%% @deprecated Use pop_list_size/1 instead.
 list_size(Pid) ->
     pop_list_size(Pid).
+
+%% @spec (Pid::pid()) -> {ok, integer()}
+%% @doc Return the size of mails on pop server.
 pop_list_size(Pid) ->
     gen_server:call(Pid, pop_list_size). 
 
+%% @spec (Pid::pid()) -> {ok, proplist()}
+%% @equiv pop_list_top(Pid)
+%% @deprecated Use pop_list_top/1 instead.
 list_top(Pid) ->
     pop_list_top(Pid).
+
+%% @spec (Pid::pid()) -> {ok, proplist()}
+%% @doc Return the headers of the message on pop
+%% server.
 pop_list_top(Pid) ->
     gen_server:call(Pid, pop_list_top). 
 
+%% @spec (Pid::pid()) -> {ok, proplist()} 
+%% @equiv pop_list(Pid)
+%% @deprecated Use pop_list/1 instead.
 list(Pid) ->
     pop_list(Pid).
+
+%% @spec (Pid::pid()) -> {ok, proplist()} 
+%% @doc Retrieve all mails on pop server.
 pop_list(Pid) ->
     gen_server:call(Pid, pop_list). 
 
+%% @spec (Pid::pid(), MessageID::integer()) -> {ok, mail()}
+%% @equiv pop_retrieve(Pid, MessageID)
+%% @deprecated Use pop_retrieve/2 instead.
 retrieve(Pid, MessageID) ->
     pop_retrieve(Pid, MessageID).
+
+%% @spec (Pid::pid(), MessageID::integer(),
+%%        Type::type()) -> {ok, mail()}
+%% @equiv pop_retrieve(Pid, MessageID, Type) 
+%% @deprecated Use pop_retrieve/3 instead.
+%% @see pop_retrieve/3
 retrieve(Pid, MessageID, Type) ->
     pop_retrieve(Pid, MessageID, Type).
+
+%% @spec (Pid::pid(), MessageID::integer()) -> {ok, mail()}
+%% @equiv pop_retrieve(Pid, MessageID, plain)
+%% @see pop_retrieve/3
 pop_retrieve(Pid, MessageID) ->
     pop_retrieve(Pid, MessageID, plain).
+
+%% @spec (Pid::pid(), MessageID::integer(),
+%%	  Type::type()) -> {ok, mail()}
+%% @type type() = plain
+%% @doc Retrieve the message specified by `MessageID'.
+%% Only support text/plain type currently. 
 pop_retrieve(Pid, MessageID, Type) ->
     gen_server:call(Pid, {pop_retrieve, MessageID, Type}). 
 
+%% @spec (Pid::pid(), MessageID::integer()) -> proplist()
+%% @equiv list_top(Pid, MessageID)
+%% @deprecated Use pop_top/2 instead.
 top(Pid, MessageID) ->
     pop_top(Pid, MessageID).
+
+%% @spec (Pid::pid(), MessageID::integer()) -> proplist()
+%% @doc Return headers of specified message by `MessageID'.
 pop_top(Pid, MessageID) ->
     gen_server:call(Pid, {pop_top, MessageID}). 
 
-%% Get pop3 server capabilities.
+%% @spec (Pid::pid()) -> {ok, list()}
+%% @deprecated Use pop_capabilities/1 instead.
 capabilities(Pid) ->
     pop_capabilities(Pid).
+
+%% @spec (Pid::pid()) -> {ok, list()}
+%% @doc Return capabilities of pop server.
 pop_capabilities(Pid) ->
     gen_server:call(Pid, pop_capabilities).
 
 
-%% Send APIs
+%% @spec (Server::string(), Port::integer(), User::string(),
+%%	  Passwd::string(), Options::list()) -> {ok, pid()}
+%% @doc Open smtp connection to send mails later.
 open_send_session(Server, Port, User, Passwd, Options) ->    
     {ok, Fsm} = smtpc:connect(Server, Port, Options),
     smtpc:ehlo(Fsm, "localhost"),
     ok = smtpc:auth(Fsm, User, Passwd),
     {ok, Fsm}.
 
+%% @spec (Fsm::pid()) -> ok
+%% @doc Close smtp connection.
 close_send_session(Fsm) ->
     case erlang:is_process_alive(Fsm) of
         true ->
@@ -135,9 +188,17 @@ close_send_session(Fsm) ->
             ok
     end.
 
+%% @spec (Fsm::pid(), From::string(), To::list(), Cc::list(),
+%%  	  Subject::list(), Body::list(), Attatchments::list())-> ok
+%% @equiv send(Fsm, From, To, Cc, [], Subject, Body, Attatchments)
+%% @see send/8.
 send(Fsm, From, To, Cc, Subject, Body, Attatchments) ->
     send(Fsm, From, To, Cc, [], Subject, Body, Attatchments).
 
+%% @spec (Fsm::pid(), From::string(), To::list(), Cc::list(), Bcc::list(),
+%%  	  Subject::list(), Body::list(), Attatchments::list())-> ok
+%% @doc Send mail to receivers specified by `To',`Cc',`Bcc'.
+%% @see send_util:encode_mail/7.
 send(Fsm, From, To, Cc, Bcc, Subject, Body, Attatchments) ->
     ?D(From),
     smtpc:mail(Fsm, From),
@@ -150,64 +211,119 @@ send(Fsm, From, To, Cc, Bcc, Subject, Body, Attatchments) ->
     ok.
 
 
-%% List mailboxes with simple desc.
+%% @spec (Pid::pid()) -> {ok, list()}
+%% @see imap_list_mailbox/2
 imap_list_mailbox(Pid) ->
     imap_list_mailbox(Pid, "\"\"").
+
+%% @spec (Pid::pid(), RefName::string()) -> {ok, list()}
+%% @doc Return a subset of mailbox names with its utf8 name
+%% and essential info from the complete set of all names
+%% available to the client filtered by `RefName'.
+%%
+%% See [http://tools.ietf.org/html/rfc3501#section-6.3.8] for
+%% more information about `RefName'.
 imap_list_mailbox(Pid, RefName) when is_list(RefName)->
     gen_server:call(Pid, {imap_list_mailbox, RefName}). 
 
-%% select mailbox and list messages.
+%% @spec (Pid::pid()) -> {ok, mailbox(), list()}
+%% @equiv imap_select_mailbox(Pid, "INBOX")
 imap_select_mailbox(Pid) ->
     imap_select_mailbox(Pid, "INBOX").
+
+%% @spec (Pid::pid(), Mailbox::list()) -> {ok, mailbox(), list()}
+%% @equiv imap_select_mailbox(Pid, Mailbox, 5)
 imap_select_mailbox(Pid, Mailbox) when is_list(Mailbox) -> 
     imap_select_mailbox(Pid, Mailbox, 5).
-imap_select_mailbox(Pid, Mailbox, Num) when is_list(Mailbox), is_integer(Num), Num > 0 ->
-    gen_server:call(Pid, {imap_select_mailbox, Mailbox, Num}). 
 
-%% list messages with simple desc.
+%% @spec (Pid::pid(), Mailbox::list(),
+%%        Size::integer()) -> {ok, mailbox(), list()}
+%% @doc Enter selected state, and return `Size' messages.
+%% See [http://tools.ietf.org/html/rfc3501#section-3.3] for
+%% more information about `Selected State'.
+imap_select_mailbox(Pid, Mailbox, Size) when is_list(Mailbox),
+					is_integer(Size), Size > 0 ->
+    gen_server:call(Pid, {imap_select_mailbox, Mailbox, Size}). 
+
+%% @spec (Pid::pid(), Seq::integer()) -> {ok, list()}
+%% @equiv imap_list_message(Pid, Seq, Seq)
 imap_list_message(Pid, Seq) when is_integer(Seq) ->
     imap_list_message(Pid, Seq, Seq). 
+
+%% @spec (Pid::pid(), FromSeq::integer(), ToSeq::integer()) -> {ok, list()}
+%% @doc Return headers and bodystructures of messages
+%% specified by `FromSeq' and `ToSeq'.
 imap_list_message(Pid, FromSeq, ToSeq) when is_integer(FromSeq), is_integer(ToSeq), FromSeq =< ToSeq->
     gen_server:call(Pid, {imap_list_message, FromSeq, ToSeq}). 
 
-%% retrieve message.
+%% @spec (Pid::pid(), MsgSeq::integer()) -> {ok, list()}
+%% @equiv imap_retrieve_message(Pid, MsgSeq, MsgSeq)
 imap_retrieve_message(Pid, MsgSeq) when is_integer(MsgSeq)->
     imap_retrieve_message(Pid, MsgSeq, MsgSeq).
+
+%% @spec (Pid::pid(), FromSeq::integer(), ToSeq::integer()) -> {ok, list()}
+%% @doc Return the entire raw messages specified by `FromSeq'
+%% and `ToSeq'.
 imap_retrieve_message(Pid, FromSeq, ToSeq) when is_integer(FromSeq), is_integer(ToSeq)->
     gen_server:call(Pid, {imap_retrieve_message, FromSeq, ToSeq}, infinity). 
 
-%% retrieve mime mail part.
+%% @spec (Pid::pid(), Section::string(), Seq::integer()) -> {ok, list()}
+%% @equiv imap_retrieve_part(Pid, [Section], Seq)
 imap_retrieve_part(Pid, Section, Seq) when is_list(Section), is_integer(hd(Section))->
     imap_retrieve_part(Pid, [Section], Seq);
+%% @spec (Pid::pid(), Section::list(), Seq::integer()) -> {ok, list()}
+%% @doc Return parts of message specified by `Seq' and `Section'.
 imap_retrieve_part(Pid, Section, Seq) when is_integer(Seq) ->
     gen_server:call(Pid, {imap_retrieve_part, Section, Seq}, infinity).
 
-%% RFC2822Msg SHOULD be in the format of an [RFC-2822] message.
+%% @spec (Pid::pid(), RFC2822Msg::list()) -> ok
+%% @doc Save draft message into `draft' mailbox. The RFC2822Msg
+%% should be in RFC-2822 format.
+%% See [http://tools.ietf.org/html/rfc3501#section-6.3.11] for
+%% more information.
 imap_save_draft(Pid, RFC2822Msg) when is_list(RFC2822Msg) ->
     gen_server:call(Pid, {imap_save_draft, RFC2822Msg}). 
 
-%% Set the \Seen flag.
+%% @spec (Pid::pid(), MsgSeq::integer()) -> ok
+%% @doc Set the \Seen flag on `MsgSeq' message.
 imap_seen_message(Pid, MsgSeq) when is_integer(MsgSeq)->
     SeqSet = lists:concat([MsgSeq, ":", MsgSeq]),
     imap_seen_message(Pid, SeqSet);
+%% @spec (Pid::pid(), SeqSet::string()) -> ok
+%% @doc Set the \Seen flag on messages specified by SeqSet.
+%% See [http://tools.ietf.org/html/rfc3501#section-6.4.6] for
+%% more information about `SeqSet'.
 imap_seen_message(Pid, SeqSet) when is_list(SeqSet) ->
     gen_server:call(Pid, {imap_seen_message, SeqSet}). 
 
-%% Move Mails to Trash.
+%% @spec (Pid::pid(), MsgSeq::integer()) -> ok
+%% @doc Move `MsgSeq' message to `Trash' mailbox.
 imap_trash_message(Pid, MsgSeq) when is_integer(MsgSeq)->
     SeqSet = lists:concat([MsgSeq, ":", MsgSeq]),
     imap_trash_message(Pid, SeqSet);
+%% @spec (Pid::pid(), SeqSet::string()) -> ok
+%% @doc Move messages specified by `SeqSet' to `Trash' mailbox.
 imap_trash_message(Pid, SeqSet) when is_list(SeqSet) ->
     gen_server:call(Pid, {imap_trash_message, SeqSet}). 
 
-%% Move Mails to Other Mailbox.
+%% @spec (Pid::pid(), MsgSeq::integer(), Mailbox::list()) -> ok
+%% @doc Move message specified by `MsgSeq' to mailbox specified
+%% by `Mailbox'.
 imap_move_message(Pid, MsgSeq, Mailbox) when is_integer(MsgSeq), is_list(Mailbox)->
     SeqSet = lists:concat([MsgSeq, ":", MsgSeq]),
     imap_move_message(Pid, SeqSet, Mailbox);
+%% @spec (Pid::pid(), SeqSet::string(), Mailbox::list()) -> ok
+%% @doc Move message specified by `SeqSet' to mailbox specified
+%% by `Mailbox'.
 imap_move_message(Pid, SeqSet, Mailbox) when is_list(SeqSet), is_list(Mailbox) ->
     gen_server:call(Pid, {imap_move_message, SeqSet, Mailbox}). 
 
 %% Delete Mails that marked \Deleted.
+%% @spec (Pid::pid()) -> ok
+%% @doc Permanently removes all messages that have the
+%% \Deleted flag set from the currently selected mailbox.
+%% See [http://tools.ietf.org/html/rfc3501#section-6.4.3]
+%% for more information.
 imap_clear_mailbox(Pid) ->
     gen_server:call(Pid, imap_clear_mailbox). 
 

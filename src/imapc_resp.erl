@@ -49,8 +49,6 @@ analyze_response(StateName, Responses, {command, logout, {}}, From) ->
 
 %% LIST  - TODO: rfc stipulations
 analyze_response(authenticated, Responses, {command, list, _}, From) ->
-  % Responses = [Response],
-  % Response = {response,untagged,"LIST",{"[RYTong]",["\\HasChildren"]}}
   send_client_response_result({ok, list_value(Responses)}, From),
   authenticated;
 
