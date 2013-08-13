@@ -12,7 +12,7 @@
 
 -export([mailbox_to_utf8/1, make_envelope/1]).
 
--compile([nowarn_unused_function]).
+-compile([nowarn_unused_function, export_all]).
 
 %%%------------------
 %%% Utility functions
@@ -157,7 +157,7 @@ parse_fetch_result([$( | Rest], Acc) ->
   {Str2, Acc2} = parse_fetch_result(Rest, []),
   parse_fetch_result(Str2, Acc ++ [Acc2]);
 parse_fetch_result(Str = [$" | _], Acc) ->
-  {match, [{0, Len}]} = re:run(Str, "\".*?\""),
+  {match, [{0, Len}]} = re:run(Str, "(\".*?\")[\\s)]", [{capture, all_but_first}]),
   {Value, Str2} = lists:split(Len-1, Str), 
   parse_fetch_result(tl(Str2), Acc ++ [tl(Value)]);
 parse_fetch_result(Str = [${ | _], Acc) ->
